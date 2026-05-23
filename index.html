@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trinity Daily Log</title>
+  <style>
+    :root {
+      --trinity-blue: #1f4e79;
+      --trinity-blue-bg: #eaf1f8;
+      --line: #b8c6d6;
+      --text: #1a1a1a;
+      --error: #b00020;
+      --muted: #6b6b6b;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      color: var(--text);
+      background: #fff;
+      padding: 40px 20px;
+    }
+    .card {
+      max-width: 560px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 32px 36px;
+      background: var(--trinity-blue-bg);
+      border-radius: 8px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0 0 4px;
+      color: var(--trinity-blue);
+      font-size: 24px;
+    }
+    h2 {
+      margin: 0 0 28px;
+      color: var(--trinity-blue);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      color: var(--trinity-blue);
+      font-weight: 600;
+      margin-bottom: 6px;
+      text-align: left;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+      margin-left: 6px;
+    }
+    .email-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    input[type="email"] {
+      flex: 1;
+      padding: 14px;
+      font-size: 17px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: #fff;
+      color: var(--text);
+      min-width: 0;
+    }
+    input[type="email"]:focus {
+      outline: none;
+      border-color: var(--trinity-blue);
+      box-shadow: 0 0 0 2px rgba(31, 78, 121, 0.18);
+    }
+    .add-btn {
+      background: #fff;
+      color: var(--trinity-blue);
+      border: 1px solid var(--trinity-blue);
+      padding: 0 18px;
+      font-size: 17px;
+      font-weight: 600;
+      border-radius: 4px;
+      cursor: pointer;
+      min-width: 72px;
+    }
+    .add-btn:hover { background: #dde8f3; }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 20px;
+      min-height: 4px;
+      text-align: left;
+    }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 4px 8px 14px;
+      background: #fff;
+      border: 1px solid var(--trinity-blue);
+      color: var(--trinity-blue);
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 500;
+      max-width: 100%;
+    }
+    .chip-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 360px;
+    }
+    .chip-remove {
+      background: transparent;
+      border: 0;
+      color: var(--trinity-blue);
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 10px;
+      border-radius: 999px;
+    }
+    .chip-remove:hover { background: var(--trinity-blue-bg); }
+    button.start {
+      width: 100%;
+      background: var(--trinity-blue);
+      color: #fff;
+      border: 0;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    button.start:hover { background: #173b5c; }
+    button.start:disabled { background: #95a8bd; cursor: not-allowed; }
+    .error {
+      color: var(--error);
+      font-size: 14px;
+      margin: 4px 0 4px;
+      text-align: left;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Trinity Investigations &amp; Security Inc.</h1>
+    <h2>Daily Security Officer Log</h2>
+
+    <label for="email">
+      Send logs to:
+      <span class="hint">(add one or more addresses)</span>
+    </label>
+    <div class="email-row">
+      <input type="email" id="email"
+             autocomplete="off"
+             autocorrect="off"
+             autocapitalize="off"
+             spellcheck="false"
+             enterkeyhint="done"
+             inputmode="email"
+             placeholder="manager@example.com">
+      <button type="button" class="add-btn" id="addBtn">+ Add</button>
+    </div>
+    <div class="error" id="error"></div>
+    <div class="chips" id="chips" aria-live="polite"></div>
+
+    <button type="button" class="start" id="startBtn">Start</button>
+  </div>
+
+  <script>
+    // -------------------------------------------------------
+    //  CONFIG  — change these two if your setup changes
+    // -------------------------------------------------------
+    // Cloudflare Worker that relays to Apps Script. This is where every
+    // POST from this page goes — it forwards to the Apps Script doGet
+    // (because Apps Script doPost is currently broken at the platform
+    // level for many accounts, as of late 2025).
+    const WORKER_URL = 'https://daily-log-relay.trinitysecuritylogs.workers.dev/';
+
+    // Where to send the user after they pick recipients. Relative path
+    // since both files are served from the same GitHub Pages origin.
+    const FORM_URL = 'Form.html';
+
+    // On first load, try to pre-populate recipients from a list saved
+    // locally. We can't reach Apps Script for the last-saved list
+    // anymore (that needed the iframe template variables), so the
+    // tablet now remembers it locally via localStorage.
+    const INITIAL_EMAILS = localStorage.getItem('trinity:lastEmails') || '';
+
+    const emailInput = document.getElementById('email');
+    const addBtn     = document.getElementById('addBtn');
+    const startBtn   = document.getElementById('startBtn');
+    const errorEl    = document.getElementById('error');
+    const chipsEl    = document.getElementById('chips');
+
+    const recipients = [];
+
+    function isValidEmail(s) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+    }
+
+    function renderChips() {
+      chipsEl.innerHTML = '';
+      recipients.forEach((addr, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        const text = document.createElement('span');
+        text.className = 'chip-text';
+        text.textContent = addr;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip-remove';
+        btn.setAttribute('aria-label', 'Remove ' + addr);
+        btn.textContent = '\u00d7'; // multiplication sign — used as X
+        btn.addEventListener('click', () => {
+          recipients.splice(idx, 1);
+          renderChips();
+        });
+        chip.appendChild(text);
+        chip.appendChild(btn);
+        chipsEl.appendChild(chip);
+      });
+    }
+
+    function addEmail() {
+      const raw = (emailInput.value || '').trim();
+      if (!raw) {
+        errorEl.textContent = 'Type an email, then tap Add.';
+        emailInput.focus();
+        return false;
+      }
+      const candidates = raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+      const bad = [];
+      const dupes = [];
+      const added = [];
+      candidates.forEach(addr => {
+        const lower = addr.toLowerCase();
+        if (!isValidEmail(addr)) {
+          bad.push(addr);
+        } else if (recipients.some(r => r.toLowerCase() === lower)) {
+          dupes.push(addr);
+        } else {
+          recipients.push(addr);
+          added.push(addr);
+        }
+      });
+      if (bad.length) {
+        errorEl.textContent = 'Not a valid email: ' + bad.join(', ');
+        emailInput.focus();
+        return false;
+      }
+      if (!added.length && dupes.length) {
+        errorEl.textContent = 'Already added: ' + dupes.join(', ');
+      } else {
+        errorEl.textContent = '';
+      }
+      emailInput.value = '';
+      renderChips();
+      emailInput.focus();
+      return added.length > 0;
+    }
+
+    async function go() {
+      // If the user typed something but forgot to tap Add, fold it in now.
+      if ((emailInput.value || '').trim()) {
+        addEmail();
+        if (errorEl.textContent) return;
+      }
+      if (!recipients.length) {
+        errorEl.textContent = 'Add at least one email address.';
+        emailInput.focus();
+        return;
+      }
+      errorEl.textContent = '';
+      startBtn.disabled = true;
+      startBtn.textContent = 'Loading\u2026';
+
+      try {
+        const resp = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'saveLastEmails',
+            emails: recipients
+          })
+        });
+        const result = await resp.json();
+
+        if (!result.ok) {
+          throw new Error(result.error || 'Server rejected the request.');
+        }
+
+        // Remember locally for next session's pre-population
+        localStorage.setItem('trinity:lastEmails', recipients.join(','));
+
+        // Navigate to the form
+        window.location.href = FORM_URL;
+
+      } catch (err) {
+        errorEl.textContent =
+          (err && err.message) ? err.message
+            : 'Could not save the emails. Check Wi-Fi and try again.';
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start';
+      }
+    }
+
+    addBtn.addEventListener('click', addEmail);
+    startBtn.addEventListener('click', go);
+    emailInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addEmail();
+      }
+    });
+
+    // Seed chips from the last saved session
+    if (INITIAL_EMAILS) {
+      INITIAL_EMAILS.split(/[,;\s]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .forEach(addr => {
+          if (isValidEmail(addr) &&
+              !recipients.some(r => r.toLowerCase() === addr.toLowerCase())) {
+            recipients.push(addr);
+          }
+        });
+      renderChips();
+    }
+  </script>
+</body>
+</html>

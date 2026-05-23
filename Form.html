@@ -3,6 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Force fresh fetch on every load so iterating on changes is painless.
+       Without this, Android Chrome may serve a cached old copy for hours. -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Trinity Daily Security Officer Log</title>
   <style>
     :root {
@@ -364,6 +369,13 @@
     <button type="button" class="submit-btn" id="submitBtn">Submit Log</button>
   </section>
 
+  <!-- Version stamp — bump this whenever you push a new build so you
+       can confirm on the tablet that you're seeing the latest code.
+       Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
+  <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
+    Form v2026-05-23-build1
+  </div>
+
 </div>
 
 <!-- ===== Confirm modal ===== -->
@@ -540,6 +552,40 @@
       if (t.value && !isValidTime(t.value)) {
         t.classList.add('field-error');
       }
+    }
+  });
+
+  // Enter-key navigation between row fields.
+  // - Enter on a time cell → jump to the description in the same row.
+  // - Enter on a description → jump to the time in the next row.
+  // - Enter on the last description → just dismiss the keyboard.
+  // The keyboard's "Next" arrow (enterkeyhint="next") fires Enter on
+  // tap, so this handler is what makes that arrow actually do something.
+  logPages.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const t = e.target;
+    if (!t.classList) return;
+
+    if (t.classList.contains('row-time')) {
+      e.preventDefault();
+      const row = t.closest('.row');
+      const desc = row.querySelector('.row-desc');
+      if (desc) desc.focus();
+      return;
+    }
+
+    if (t.classList.contains('row-desc')) {
+      e.preventDefault();
+      const rowNum = parseInt(t.dataset.row, 10);
+      // If this is the last row of the last page, just dismiss.
+      if (rowNum >= totalRowCount()) {
+        t.blur();
+        return;
+      }
+      const nextTime = document.querySelector(
+        'input.row-time[data-row="' + (rowNum + 1) + '"]'
+      );
+      if (nextTime) nextTime.focus();
     }
   });
 

@@ -3,798 +3,344 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trinity Daily Security Officer Log</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Trinity Daily Log</title>
   <style>
     :root {
       --trinity-blue: #1f4e79;
-      --trinity-blue-light: #5a87b8;
       --trinity-blue-bg: #eaf1f8;
       --line: #b8c6d6;
       --text: #1a1a1a;
-      --muted: #6b6b6b;
       --error: #b00020;
-      --success: #1f7a3f;
-      --row-height: 44px;
+      --muted: #6b6b6b;
     }
-
     * { box-sizing: border-box; }
-
     html, body {
-      margin: 0;
-      padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-                   Arial, sans-serif;
+      margin: 0; padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
       color: var(--text);
       background: #fff;
-      font-size: 16px;
+      padding: 40px 20px;
     }
-
-    .page {
-      max-width: 1340px;
-      margin: 0 auto;
-      padding: 16px 20px 80px;
-    }
-
-    /* ---------- Header ---------- */
-    header.brand {
-      text-align: center;
-      padding: 8px 0 14px;
-      border-bottom: 2px solid var(--trinity-blue);
-      margin-bottom: 16px;
-    }
-    header.brand h1 {
-      margin: 0;
-      font-size: 22px;
-      color: var(--trinity-blue);
-      font-weight: 700;
-      letter-spacing: 0.3px;
-    }
-    header.brand h2 {
-      margin: 4px 0 0;
-      font-size: 18px;
-      color: var(--trinity-blue);
-      font-weight: 600;
-    }
-
-    /* ---------- Top fields ---------- */
-    section.top-fields {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      padding: 12px;
-      background: var(--trinity-blue-bg);
-      border-radius: 6px;
-      margin-bottom: 16px;
-    }
-    section.top-fields > div:nth-child(1),
-    section.top-fields > div:nth-child(2),
-    section.top-fields > div:nth-child(5) {
-      grid-column: 1 / -1;
-    }
-    section.top-fields label {
-      display: block;
-      font-size: 13px;
-      color: var(--trinity-blue);
-      font-weight: 600;
-      margin-bottom: 4px;
-    }
-    section.top-fields input {
+    .card {
+      max-width: 560px;
       width: 100%;
-      padding: 10px 10px;
-      font-size: 16px;
+      margin: 0 auto;
+      padding: 32px 36px;
+      background: var(--trinity-blue-bg);
+      border-radius: 8px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0 0 4px;
+      color: var(--trinity-blue);
+      font-size: 24px;
+    }
+    h2 {
+      margin: 0 0 28px;
+      color: var(--trinity-blue);
+      font-size: 18px;
+      font-weight: 600;
+    }
+    label {
+      display: block;
+      font-size: 14px;
+      color: var(--trinity-blue);
+      font-weight: 600;
+      margin-bottom: 6px;
+      text-align: left;
+    }
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 400;
+      margin-left: 6px;
+    }
+    .email-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    input[type="email"] {
+      flex: 1;
+      padding: 14px;
+      font-size: 17px;
       border: 1px solid var(--line);
       border-radius: 4px;
       background: #fff;
       color: var(--text);
+      min-width: 0;
     }
-    section.top-fields input:focus {
+    input[type="email"]:focus {
       outline: none;
       border-color: var(--trinity-blue);
       box-shadow: 0 0 0 2px rgba(31, 78, 121, 0.18);
     }
-
-    /* ---------- Log table ---------- */
-    section.log-table {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      overflow: hidden;
-      margin-bottom: 16px;
-    }
-    .row, .row-header {
-      display: grid;
-      grid-template-columns: 140px 1fr;
-      align-items: stretch;
-    }
-    .row-header {
-      background: var(--trinity-blue);
-      color: #fff;
+    .add-btn {
+      background: #fff;
+      color: var(--trinity-blue);
+      border: 1px solid var(--trinity-blue);
+      padding: 0 18px;
+      font-size: 17px;
       font-weight: 600;
-      font-size: 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      min-width: 72px;
     }
-    .row-header > div {
-      padding: 10px 12px;
-    }
-    .row-header .cell-desc {
-      border-left: 1px solid rgba(255,255,255,0.3);
-    }
-    .row + .row {
-      border-top: 1px solid var(--line);
-    }
-    .row .cell-time, .row .cell-desc {
-      padding: 0;
-    }
-    .row .cell-desc {
-      border-left: 1px solid var(--line);
-    }
-    .row .cell-time {
+    .add-btn:hover { background: #dde8f3; }
+    .chips {
       display: flex;
-      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 20px;
+      min-height: 4px;
+      text-align: left;
     }
-    .row input,
-    .row textarea {
-      width: 100%;
-      min-height: var(--row-height);
-      border: 0;
-      padding: 11px 12px;
-      font-size: 16px;
-      background: transparent;
-      color: var(--text);
-      font-family: inherit;
-      line-height: 1.35;
-    }
-    .row input.row-time {
-      height: var(--row-height);
-      padding: 0 12px;
-    }
-    .row textarea.row-desc {
-      display: block;
-      resize: none;
-      overflow: hidden;
-    }
-    .row input:focus,
-    .row textarea:focus {
-      outline: none;
-      background: #f5f9fd;
-      box-shadow: inset 0 0 0 2px var(--trinity-blue);
-    }
-    .row.has-content .cell-time { background: #fafcff; }
-
-    /* ---------- Page divider ---------- */
-    .page-divider {
-      display: flex;
+    .chip {
+      display: inline-flex;
       align-items: center;
-      justify-content: center;
-      gap: 12px;
-      margin: 4px 0 12px;
+      gap: 4px;
+      padding: 8px 4px 8px 14px;
+      background: #fff;
+      border: 1px solid var(--trinity-blue);
       color: var(--trinity-blue);
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 1.2px;
-    }
-    .page-divider::before,
-    .page-divider::after {
-      content: '';
-      flex: 1;
-      border-top: 1px dashed var(--trinity-blue-light);
-    }
-    .page-divider .page-label {
-      background: var(--trinity-blue-bg);
-      color: var(--trinity-blue);
-      padding: 4px 12px;
       border-radius: 999px;
-      border: 1px solid var(--trinity-blue-light);
+      font-size: 15px;
+      font-weight: 500;
+      max-width: 100%;
     }
-
-    /* ---------- Bottom: signature, clear, submit ---------- */
-    section.bottom {
-      display: grid;
-      grid-template-columns: 1fr auto auto;
-      gap: 16px;
-      align-items: end;
-      padding: 14px;
-      background: var(--trinity-blue-bg);
-      border-radius: 6px;
+    .chip-text {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 360px;
     }
-    .sig label {
-      display: block;
-      font-size: 13px;
+    .chip-remove {
+      background: transparent;
+      border: 0;
       color: var(--trinity-blue);
-      font-weight: 600;
-      margin-bottom: 4px;
+      font-size: 22px;
+      line-height: 1;
+      cursor: pointer;
+      padding: 2px 10px;
+      border-radius: 999px;
     }
-    .sig input {
+    .chip-remove:hover { background: var(--trinity-blue-bg); }
+    button.start {
       width: 100%;
-      padding: 10px 10px;
-      font-size: 16px;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      background: #fff;
-      font-style: italic;
-    }
-    button.submit-btn {
       background: var(--trinity-blue);
       color: #fff;
       border: 0;
-      padding: 14px 28px;
-      font-size: 16px;
+      padding: 16px;
+      font-size: 18px;
       font-weight: 600;
       border-radius: 6px;
       cursor: pointer;
-      min-width: 160px;
-      height: 48px;
     }
-    button.submit-btn:hover { background: #173b5c; }
-    button.submit-btn:disabled {
-      background: #95a8bd;
-      cursor: not-allowed;
+    button.start:hover { background: #173b5c; }
+    button.start:disabled { background: #95a8bd; cursor: not-allowed; }
+    .error {
+      color: var(--error);
+      font-size: 14px;
+      margin: 4px 0 4px;
+      text-align: left;
+      min-height: 18px;
     }
-
-    /* ---------- Modals / overlays ---------- */
-    .overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.5);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    .overlay.show { display: flex; }
-    .modal {
-      background: #fff;
-      border-radius: 8px;
-      padding: 24px;
-      max-width: 480px;
-      width: 90%;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-    }
-    .modal h3 {
-      margin: 0 0 12px;
-      color: var(--trinity-blue);
-      font-size: 20px;
-    }
-    .modal p {
-      margin: 0 0 20px;
-      font-size: 15px;
-      line-height: 1.5;
-    }
-    .modal .actions {
-      display: flex;
-      gap: 12px;
-      justify-content: flex-end;
-    }
-    .modal button {
-      padding: 10px 20px;
-      font-size: 15px;
-      border-radius: 4px;
-      cursor: pointer;
-      border: 0;
-      font-weight: 600;
-    }
-    .modal button.confirm {
-      background: var(--trinity-blue);
-      color: #fff;
-    }
-    .modal button.cancel {
-      background: #e5e5e5;
-      color: var(--text);
-    }
-    .modal.success h3 { color: var(--success); }
-    .modal.error h3 { color: var(--error); }
-    .modal .spinner {
-      display: inline-block;
-      width: 18px;
-      height: 18px;
-      border: 3px solid #e5e5e5;
-      border-top-color: var(--trinity-blue);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      vertical-align: middle;
-      margin-right: 8px;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .field-error {
-      border-color: var(--error) !important;
-      box-shadow: 0 0 0 2px rgba(176, 0, 32, 0.15) !important;
-    }
-
-    /* ---------- Clear button ---------- */
-    button.clear-btn {
-      background: #fff;
-      color: var(--trinity-blue);
-      border: 2px solid var(--trinity-blue);
-      padding: 12px 22px;
-      font-size: 15px;
-      font-weight: 600;
-      border-radius: 6px;
-      cursor: pointer;
-      height: 48px;
-    }
-    button.clear-btn:hover { background: #f0f6fc; }
   </style>
 </head>
 <body>
-
-<div class="page">
-
-  <header class="brand">
+  <div class="card">
     <h1>Trinity Investigations &amp; Security Inc.</h1>
-    <h2>Daily Security Officer Log Sheet</h2>
-  </header>
+    <h2>Daily Security Officer Log</h2>
 
-  <section class="top-fields">
-    <div>
-      <label for="dutyOfficer">Duty Officer</label>
-      <input type="text" id="dutyOfficer" autocomplete="off" required>
+    <label for="email">
+      Send logs to:
+      <span class="hint">(add one or more addresses)</span>
+    </label>
+    <div class="email-row">
+      <input type="email" id="email"
+             autocomplete="off"
+             autocorrect="off"
+             autocapitalize="off"
+             spellcheck="false"
+             enterkeyhint="done"
+             inputmode="email"
+             placeholder="manager@example.com">
+      <button type="button" class="add-btn" id="addBtn">+ Add</button>
     </div>
-    <div>
-      <label for="location">Location</label>
-      <input type="text" id="location" autocomplete="off" required>
-    </div>
-    <div>
-      <label for="startTime">Start Time</label>
-      <input type="text" id="startTime" inputmode="numeric"
-             maxlength="5" placeholder="HH:MM"
-             autocomplete="off" required>
-    </div>
-    <div>
-      <label for="endTime">End Time</label>
-      <input type="text" id="endTime" inputmode="numeric"
-             maxlength="5" placeholder="HH:MM"
-             autocomplete="off" required>
-    </div>
-    <div>
-      <label for="date">Date</label>
-      <input type="date" id="date" required>
-    </div>
-  </section>
+    <div class="error" id="error"></div>
+    <div class="chips" id="chips" aria-live="polite"></div>
 
-  <!-- Log-table sections (one per page) are rendered into here by JS. -->
-  <div id="logPages"></div>
-
-  <section class="bottom">
-    <div class="sig">
-      <label for="officerSignature">Officer Signature</label>
-      <input type="text" id="officerSignature" autocomplete="off"
-             placeholder="(same as Duty Officer)">
-    </div>
-    <button type="button" class="clear-btn" id="clearBtn">Clear form</button>
-    <button type="button" class="submit-btn" id="submitBtn">Submit Log</button>
-  </section>
-
-</div>
-
-<!-- ===== Confirm modal ===== -->
-<div class="overlay" id="confirmOverlay">
-  <div class="modal">
-    <h3>Submit this log?</h3>
-    <p>Once submitted you cannot edit it. The log will be saved and emailed
-       to the manager. Are you ready to submit?</p>
-    <div class="actions">
-      <button class="cancel" id="cancelBtn">Cancel</button>
-      <button class="confirm" id="confirmBtn">Yes, submit</button>
-    </div>
+    <button type="button" class="start" id="startBtn">Start</button>
   </div>
-</div>
 
-<!-- ===== In-flight / success / error overlay ===== -->
-<div class="overlay" id="statusOverlay">
-  <div class="modal" id="statusModal">
-    <h3 id="statusTitle"><span class="spinner"></span>Submitting&hellip;</h3>
-    <p id="statusMsg">Generating PDF and sending email. This usually takes 5&ndash;15 seconds.</p>
-    <div class="actions" id="statusActions" style="display:none;">
-      <button class="confirm" id="newFormBtn">Start a new log</button>
-    </div>
+  <!-- Version stamp — bump on each push to confirm tablet has latest -->
+  <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
+    Landing v2026-05-23-build1
   </div>
-</div>
 
+  <script>
+    // -------------------------------------------------------
+    //  CONFIG  — change these two if your setup changes
+    // -------------------------------------------------------
+    // Cloudflare Worker that relays to Apps Script. This is where every
+    // POST from this page goes — it forwards to the Apps Script doGet
+    // (because Apps Script doPost is currently broken at the platform
+    // level for many accounts, as of late 2025).
+    const WORKER_URL = 'https://daily-log-relay.trinitysecuritylogs.workers.dev/';
 
-<script>
-  // -------------------------------------------------------
-  //  CONFIG
-  // -------------------------------------------------------
-  // Cloudflare Worker that relays POSTs to Apps Script.
-  const WORKER_URL = 'https://daily-log-relay.trinitysecuritylogs.workers.dev/';
+    // Where to send the user after they pick recipients. Relative path
+    // since both files are served from the same GitHub Pages origin.
+    const FORM_URL = 'Form.html';
 
-  // -----------------------------------------------------------
-  //  Multi-page log table
-  // -----------------------------------------------------------
-  const ROWS_PER_PAGE = 28;
-  const MAX_PAGES = 20;
-  let totalPages = 0;
-  const logPages = document.getElementById('logPages');
+    // On first load, try to pre-populate recipients from a list saved
+    // locally. We can't reach Apps Script for the last-saved list
+    // anymore (that needed the iframe template variables), so the
+    // tablet now remembers it locally via localStorage.
+    const INITIAL_EMAILS = localStorage.getItem('trinity:lastEmails') || '';
 
-  function totalRowCount() { return totalPages * ROWS_PER_PAGE; }
+    const emailInput = document.getElementById('email');
+    const addBtn     = document.getElementById('addBtn');
+    const startBtn   = document.getElementById('startBtn');
+    const errorEl    = document.getElementById('error');
+    const chipsEl    = document.getElementById('chips');
 
-  function buildPageSection(pageNum) {
-    const section = document.createElement('section');
-    section.className = 'log-table';
-    section.dataset.page = pageNum;
+    const recipients = [];
 
-    const header = document.createElement('div');
-    header.className = 'row-header';
-    header.innerHTML =
-      '<div class="cell-time">Time</div>' +
-      '<div class="cell-desc">Description</div>';
-    section.appendChild(header);
-
-    const startRow = (pageNum - 1) * ROWS_PER_PAGE + 1;
-    const endRow = startRow + ROWS_PER_PAGE - 1;
-
-    for (let i = startRow; i <= endRow; i++) {
-      const row = document.createElement('div');
-      row.className = 'row';
-      row.dataset.row = i;
-      row.dataset.page = pageNum;
-      row.innerHTML =
-        '<div class="cell-time"><input type="text" inputmode="numeric" ' +
-          'maxlength="5" placeholder="HH:MM" autocomplete="off" ' +
-          'enterkeyhint="next" ' +
-          'class="row-time" data-row="' + i + '"></div>' +
-        '<div class="cell-desc"><textarea autocomplete="off" rows="2" ' +
-          'enterkeyhint="next" class="row-desc" ' +
-          'data-row="' + i + '" placeholder="Log entry…"></textarea></div>';
-      section.appendChild(row);
+    function isValidEmail(s) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
     }
 
-    return section;
-  }
-
-  function addPage(opts) {
-    if (totalPages >= MAX_PAGES) return false;
-    totalPages++;
-
-    if (totalPages > 1) {
-      const divider = document.createElement('div');
-      divider.className = 'page-divider';
-      divider.dataset.page = totalPages;
-      divider.innerHTML = '<span class="page-label">Page ' + totalPages + '</span>';
-      logPages.appendChild(divider);
+    function renderChips() {
+      chipsEl.innerHTML = '';
+      recipients.forEach((addr, idx) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip';
+        const text = document.createElement('span');
+        text.className = 'chip-text';
+        text.textContent = addr;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'chip-remove';
+        btn.setAttribute('aria-label', 'Remove ' + addr);
+        btn.textContent = '\u00d7'; // multiplication sign — used as X
+        btn.addEventListener('click', () => {
+          recipients.splice(idx, 1);
+          renderChips();
+        });
+        chip.appendChild(text);
+        chip.appendChild(btn);
+        chipsEl.appendChild(chip);
+      });
     }
 
-    const section = buildPageSection(totalPages);
-    logPages.appendChild(section);
-    return true;
-  }
-
-  addPage();
-
-  // -----------------------------------------------------------
-  //  Defaults & live behaviors
-  // -----------------------------------------------------------
-  // Date defaults to today
-  (function setDateDefault() {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, '0');
-    const dd = String(d.getDate()).padStart(2, '0');
-    document.getElementById('date').value = yyyy + '-' + mm + '-' + dd;
-  })();
-
-  // Time field formatting — runs on blur, not input. Keeps keyboard happy.
-  function formatTimeInput(el) {
-    const digits = el.value.replace(/[^\d]/g, '').slice(0, 4);
-    const formatted = digits.length >= 3
-      ? digits.slice(0, -2) + ':' + digits.slice(-2)
-      : digits;
-    if (el.value !== formatted) el.value = formatted;
-  }
-
-  function isValidTime(v) {
-    const m = v.match(/^(\d{1,2}):(\d{2})$/);
-    return !!m && parseInt(m[1], 10) <= 23 && parseInt(m[2], 10) <= 59;
-  }
-
-  // Top time fields: clear errors on input, validate + format on blur
-  ['startTime', 'endTime'].forEach(id => {
-    const el = document.getElementById(id);
-    el.addEventListener('input', () => {
-      el.classList.remove('field-error');
-    });
-    el.addEventListener('blur', () => {
-      formatTimeInput(el);
-      if (el.value && !isValidTime(el.value)) {
-        el.classList.add('field-error');
+    function addEmail() {
+      const raw = (emailInput.value || '').trim();
+      if (!raw) {
+        errorEl.textContent = 'Type an email, then tap Add.';
+        emailInput.focus();
+        return false;
       }
-    });
-  });
-
-  // Officer Signature auto-mirrors Duty Officer
-  const dutyOfficerInput = document.getElementById('dutyOfficer');
-  const officerSignatureInput = document.getElementById('officerSignature');
-  let signatureTouched = false;
-  officerSignatureInput.addEventListener('input', () => { signatureTouched = true; });
-  dutyOfficerInput.addEventListener('input', () => {
-    if (!signatureTouched) officerSignatureInput.value = dutyOfficerInput.value;
-  });
-
-  // Row events: clear error on input, format + validate on blur, expand pages
-  logPages.addEventListener('input', e => {
-    const t = e.target;
-    if (!t.classList) return;
-
-    if (t.classList.contains('row-time')) {
-      t.classList.remove('field-error');
-    }
-    if (t.classList.contains('row-time') || t.classList.contains('row-desc')) {
-      const row = t.closest('.row');
-      if (!row) return;
-      const timeVal = row.querySelector('.row-time').value;
-      const descVal = row.querySelector('.row-desc').value;
-      row.classList.toggle('has-content', !!(timeVal || descVal));
-
-      const rowNum = parseInt(row.dataset.row, 10);
-      if (rowNum === totalRowCount() && (timeVal || descVal)) {
-        addPage();
+      const candidates = raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+      const bad = [];
+      const dupes = [];
+      const added = [];
+      candidates.forEach(addr => {
+        const lower = addr.toLowerCase();
+        if (!isValidEmail(addr)) {
+          bad.push(addr);
+        } else if (recipients.some(r => r.toLowerCase() === lower)) {
+          dupes.push(addr);
+        } else {
+          recipients.push(addr);
+          added.push(addr);
+        }
+      });
+      if (bad.length) {
+        errorEl.textContent = 'Not a valid email: ' + bad.join(', ');
+        emailInput.focus();
+        return false;
       }
-    }
-  });
-
-  // Format + validate row times on blur
-  logPages.addEventListener('focusout', e => {
-    const t = e.target;
-    if (t && t.classList && t.classList.contains('row-time')) {
-      formatTimeInput(t);
-      if (t.value && !isValidTime(t.value)) {
-        t.classList.add('field-error');
+      if (!added.length && dupes.length) {
+        errorEl.textContent = 'Already added: ' + dupes.join(', ');
+      } else {
+        errorEl.textContent = '';
       }
-    }
-  });
-
-  // Enter-key navigation between row fields.
-  // - Enter on a time cell → jump to the description in the same row.
-  // - Enter on a description → jump to the time in the next row.
-  // - Enter on the last description → just dismiss the keyboard.
-  // The keyboard's "Next" arrow (enterkeyhint="next") fires Enter on
-  // tap, so this handler is what makes that arrow actually do something.
-  logPages.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    const t = e.target;
-    if (!t.classList) return;
-
-    if (t.classList.contains('row-time')) {
-      e.preventDefault();
-      const row = t.closest('.row');
-      const desc = row.querySelector('.row-desc');
-      if (desc) desc.focus();
-      return;
+      emailInput.value = '';
+      renderChips();
+      emailInput.focus();
+      return added.length > 0;
     }
 
-    if (t.classList.contains('row-desc')) {
-      e.preventDefault();
-      const rowNum = parseInt(t.dataset.row, 10);
-      // If this is the last row of the last page, just dismiss.
-      if (rowNum >= totalRowCount()) {
-        t.blur();
+    async function go() {
+      // If the user typed something but forgot to tap Add, fold it in now.
+      if ((emailInput.value || '').trim()) {
+        addEmail();
+        if (errorEl.textContent) return;
+      }
+      if (!recipients.length) {
+        errorEl.textContent = 'Add at least one email address.';
+        emailInput.focus();
         return;
       }
-      const nextTime = document.querySelector(
-        'input.row-time[data-row="' + (rowNum + 1) + '"]'
-      );
-      if (nextTime) nextTime.focus();
+      errorEl.textContent = '';
+      startBtn.disabled = true;
+      startBtn.textContent = 'Loading\u2026';
+
+      try {
+        const resp = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'saveLastEmails',
+            emails: recipients
+          })
+        });
+        const result = await resp.json();
+
+        if (!result.ok) {
+          throw new Error(result.error || 'Server rejected the request.');
+        }
+
+        // Remember locally for next session's pre-population
+        localStorage.setItem('trinity:lastEmails', recipients.join(','));
+
+        // Navigate to the form
+        window.location.href = FORM_URL;
+
+      } catch (err) {
+        errorEl.textContent =
+          (err && err.message) ? err.message
+            : 'Could not save the emails. Check Wi-Fi and try again.';
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start';
+      }
     }
-  });
 
-  // -----------------------------------------------------------
-  //  Submit flow
-  // -----------------------------------------------------------
-  const submitBtn = document.getElementById('submitBtn');
-  const confirmOverlay = document.getElementById('confirmOverlay');
-  const cancelBtn = document.getElementById('cancelBtn');
-  const confirmBtn = document.getElementById('confirmBtn');
-  const statusOverlay = document.getElementById('statusOverlay');
-  const statusModal = document.getElementById('statusModal');
-  const statusTitle = document.getElementById('statusTitle');
-  const statusMsg = document.getElementById('statusMsg');
-  const statusActions = document.getElementById('statusActions');
-  const newFormBtn = document.getElementById('newFormBtn');
-
-  function gatherData() {
-    const rows = [];
-    const total = totalRowCount();
-    for (let i = 1; i <= total; i++) {
-      const tEl = document.querySelector('.row-time[data-row="' + i + '"]');
-      const dEl = document.querySelector('.row-desc[data-row="' + i + '"]');
-      if (!tEl || !dEl) continue;
-      rows.push({
-        time: (tEl.value || '').trim(),
-        description: (dEl.value || '').trim()
-      });
-    }
-    return {
-      dutyOfficer:      document.getElementById('dutyOfficer').value.trim(),
-      location:         document.getElementById('location').value.trim(),
-      date:             document.getElementById('date').value,
-      startTime:        document.getElementById('startTime').value,
-      endTime:          document.getElementById('endTime').value,
-      officerSignature: document.getElementById('officerSignature').value.trim()
-                          || document.getElementById('dutyOfficer').value.trim(),
-      rows:             rows
-    };
-  }
-
-  function validate(data) {
-    document.querySelectorAll('.field-error')
-      .forEach(el => el.classList.remove('field-error'));
-
-    const required = [
-      ['dutyOfficer', 'Duty Officer'],
-      ['location',    'Location'],
-      ['startTime',   'Start Time'],
-      ['endTime',     'End Time'],
-      ['date',        'Date']
-    ];
-    const missing = [];
-    required.forEach(([id, label]) => {
-      const el = document.getElementById(id);
-      if (!el.value || !el.value.trim()) {
-        el.classList.add('field-error');
-        missing.push(label);
+    addBtn.addEventListener('click', addEmail);
+    startBtn.addEventListener('click', go);
+    emailInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addEmail();
       }
     });
 
-    const hasAnyRow = data.rows.some(r => r.time || r.description);
-    if (!hasAnyRow) {
-      missing.push('at least one log entry');
+    // Seed chips from the last saved session
+    if (INITIAL_EMAILS) {
+      INITIAL_EMAILS.split(/[,;\s]+/)
+        .map(s => s.trim())
+        .filter(Boolean)
+        .forEach(addr => {
+          if (isValidEmail(addr) &&
+              !recipients.some(r => r.toLowerCase() === addr.toLowerCase())) {
+            recipients.push(addr);
+          }
+        });
+      renderChips();
     }
-
-    return missing;
-  }
-
-  let halfEmptyWarned = false;
-
-  submitBtn.addEventListener('click', () => {
-    const data = gatherData();
-    const missing = validate(data);
-    if (missing.length) {
-      alert('Please complete: ' + missing.join(', '));
-      return;
-    }
-
-    const halfEmpty = [];
-    data.rows.forEach((r, i) => {
-      const hasTime = !!r.time;
-      const hasDesc = !!r.description;
-      if (hasTime && !hasDesc) {
-        halfEmpty.push('Row ' + (i + 1) + ':  ' + r.time + '  (no description)');
-      } else if (!hasTime && hasDesc) {
-        const snippet = r.description.length > 50
-          ? r.description.substring(0, 50) + '…'
-          : r.description;
-        halfEmpty.push('Row ' + (i + 1) + ':  "' + snippet + '"  (no time)');
-      }
-    });
-
-    if (halfEmpty.length && !halfEmptyWarned) {
-      halfEmptyWarned = true;
-      alert(
-        halfEmpty.length + (halfEmpty.length === 1 ? ' row is' : ' rows are')
-        + ' half-empty:\n\n'
-        + halfEmpty.join('\n')
-        + '\n\nFill them in, OR tap Submit again to send anyway.'
-      );
-      return;
-    }
-
-    halfEmptyWarned = false;
-    confirmOverlay.classList.add('show');
-  });
-
-  cancelBtn.addEventListener('click', () => {
-    confirmOverlay.classList.remove('show');
-  });
-
-  confirmBtn.addEventListener('click', () => {
-    confirmOverlay.classList.remove('show');
-    submit();
-  });
-
-  async function submit() {
-    const data = gatherData();
-    submitBtn.disabled = true;
-    statusModal.className = 'modal';
-    statusTitle.innerHTML = '<span class="spinner"></span>Submitting…';
-    statusMsg.textContent =
-      'Generating PDF and sending email. This usually takes 5–15 seconds.';
-    statusActions.style.display = 'none';
-    statusOverlay.classList.add('show');
-
-    try {
-      const resp = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'processSubmissionFromWebApp',
-          data: data
-        })
-      });
-      const result = await resp.json();
-
-      if (result.ok) {
-        onSuccess(result.result);
-      } else {
-        onFailure(new Error(result.error || 'Server rejected the submission.'));
-      }
-
-    } catch (err) {
-      onFailure(err);
-    }
-  }
-
-  let lastSubmitOk = false;
-
-  function onSuccess(result) {
-    lastSubmitOk = true;
-    statusModal.className = 'modal success';
-    statusTitle.innerHTML = '✓ Log submitted';
-    statusMsg.textContent =
-      'PDF emailed to manager. Resetting form for the next officer…';
-    statusActions.style.display = 'none';
-    setTimeout(resetFormInPlace, 1800);
-  }
-
-  function resetFormInPlace() {
-    logPages.innerHTML = '';
-    totalPages = 0;
-    addPage();
-
-    ['dutyOfficer', 'location', 'startTime', 'endTime',
-     'officerSignature'].forEach(id => {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.value = '';
-      el.classList.remove('field-error');
-    });
-
-    const d = new Date();
-    document.getElementById('date').value =
-      d.getFullYear() + '-' +
-      String(d.getMonth() + 1).padStart(2, '0') + '-' +
-      String(d.getDate()).padStart(2, '0');
-
-    signatureTouched = false;
-    lastSubmitOk = false;
-    halfEmptyWarned = false;
-
-    submitBtn.disabled = false;
-    statusOverlay.classList.remove('show');
-    window.scrollTo({ top: 0, behavior: 'auto' });
-  }
-
-  function onFailure(err) {
-    lastSubmitOk = false;
-    statusModal.className = 'modal error';
-    statusTitle.innerHTML = '✕ Submission failed';
-    statusMsg.textContent =
-      (err && err.message ? err.message : String(err)) +
-      '  —  Please try again. If this keeps happening, contact your manager.';
-    statusActions.style.display = 'flex';
-    submitBtn.disabled = false;
-    newFormBtn.textContent = 'Close and retry';
-  }
-
-  newFormBtn.addEventListener('click', () => {
-    if (lastSubmitOk) {
-      resetFormInPlace();
-    } else {
-      statusOverlay.classList.remove('show');
-    }
-  });
-
-  // Clear-form button
-  const clearBtn = document.getElementById('clearBtn');
-  clearBtn.addEventListener('click', () => {
-    const anyContent = Array.from(document.querySelectorAll('input, textarea'))
-      .some(el => el.type === 'checkbox' ? el.checked : (el.value || '').trim());
-    if (!anyContent) return;
-    if (confirm('Clear ALL fields, including officer name, location and every log row?\n\nThis cannot be undone.')) {
-      resetFormInPlace();
-    }
-  });
-
-</script>
-
+  </script>
 </body>
 </html>

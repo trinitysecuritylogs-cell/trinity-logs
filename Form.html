@@ -9,6 +9,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Trinity Daily Security Officer Log</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%231f4e79'/%3E%3Ctext x='50%25' y='54%25' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle' dominant-baseline='middle'%3ET%3C/text%3E%3C/svg%3E">
   <style>
     :root {
       --trinity-blue: #1f4e79;
@@ -318,6 +319,24 @@
       height: 48px;
     }
     button.clear-btn:hover { background: #f0f6fc; }
+
+    /* ---------- Narrow screens ---------- */
+    @media (max-width: 600px) {
+      .page { padding: 12px 12px 60px; }
+      section.top-fields { grid-template-columns: 1fr; }
+      section.top-fields > div:nth-child(1),
+      section.top-fields > div:nth-child(2),
+      section.top-fields > div:nth-child(5) {
+        grid-column: auto;
+      }
+      section.bottom {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+      }
+      button.submit-btn,
+      button.clear-btn { width: 100%; min-width: 0; }
+      .row, .row-header { grid-template-columns: 90px 1fr; }
+    }
   </style>
 </head>
 <body>
@@ -373,15 +392,16 @@
        can confirm on the tablet that you're seeing the latest code.
        Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Form v2026-05-23-build1
+    Form v2026-05-23-build2
   </div>
 
 </div>
 
 <!-- ===== Confirm modal ===== -->
-<div class="overlay" id="confirmOverlay">
+<div class="overlay" id="confirmOverlay" role="dialog" aria-modal="true"
+     aria-labelledby="confirmTitle" aria-hidden="true">
   <div class="modal">
-    <h3>Submit this log?</h3>
+    <h3 id="confirmTitle">Submit this log?</h3>
     <p>Once submitted you cannot edit it. The log will be saved and emailed
        to the manager. Are you ready to submit?</p>
     <div class="actions">
@@ -392,7 +412,8 @@
 </div>
 
 <!-- ===== In-flight / success / error overlay ===== -->
-<div class="overlay" id="statusOverlay">
+<div class="overlay" id="statusOverlay" role="dialog" aria-modal="true"
+     aria-labelledby="statusTitle" aria-live="polite" aria-hidden="true">
   <div class="modal" id="statusModal">
     <h3 id="statusTitle"><span class="spinner"></span>Submitting&hellip;</h3>
     <p id="statusMsg">Generating PDF and sending email. This usually takes 5&ndash;15 seconds.</p>
@@ -511,6 +532,15 @@
         el.classList.add('field-error');
       }
     });
+  });
+
+  // Other top fields: clear the red field-error border as soon as the user
+  // starts typing. Without this, the field stays red after a failed submit
+  // even after they've fixed it, which is confusing.
+  ['dutyOfficer', 'location', 'date', 'officerSignature'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => el.classList.remove('field-error'));
   });
 
   // Officer Signature auto-mirrors Duty Officer
@@ -657,6 +687,9 @@
 
   let halfEmptyWarned = false;
 
+  function showOverlay(overlay)  { overlay.classList.add('show');    overlay.setAttribute('aria-hidden', 'false'); }
+  function hideOverlay(overlay)  { overlay.classList.remove('show'); overlay.setAttribute('aria-hidden', 'true');  }
+
   submitBtn.addEventListener('click', () => {
     const data = gatherData();
     const missing = validate(data);
@@ -691,15 +724,15 @@
     }
 
     halfEmptyWarned = false;
-    confirmOverlay.classList.add('show');
+    showOverlay(confirmOverlay);
   });
 
   cancelBtn.addEventListener('click', () => {
-    confirmOverlay.classList.remove('show');
+    hideOverlay(confirmOverlay);
   });
 
   confirmBtn.addEventListener('click', () => {
-    confirmOverlay.classList.remove('show');
+    hideOverlay(confirmOverlay);
     submit();
   });
 
@@ -711,7 +744,7 @@
     statusMsg.textContent =
       'Generating PDF and sending email. This usually takes 5–15 seconds.';
     statusActions.style.display = 'none';
-    statusOverlay.classList.add('show');
+    showOverlay(statusOverlay);
 
     try {
       const resp = await fetch(WORKER_URL, {
@@ -771,7 +804,7 @@
     halfEmptyWarned = false;
 
     submitBtn.disabled = false;
-    statusOverlay.classList.remove('show');
+    hideOverlay(statusOverlay);
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
@@ -791,7 +824,7 @@
     if (lastSubmitOk) {
       resetFormInPlace();
     } else {
-      statusOverlay.classList.remove('show');
+      hideOverlay(statusOverlay);
     }
   });
 
@@ -799,7 +832,7 @@
   const clearBtn = document.getElementById('clearBtn');
   clearBtn.addEventListener('click', () => {
     const anyContent = Array.from(document.querySelectorAll('input, textarea'))
-      .some(el => el.type === 'checkbox' ? el.checked : (el.value || '').trim());
+      .some(el => (el.value || '').trim());
     if (!anyContent) return;
     if (confirm('Clear ALL fields, including officer name, location and every log row?\n\nThis cannot be undone.')) {
       resetFormInPlace();

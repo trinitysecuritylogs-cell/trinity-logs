@@ -7,6 +7,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>Trinity Daily Log</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%231f4e79'/%3E%3Ctext x='50%25' y='54%25' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle' dominant-baseline='middle'%3ET%3C/text%3E%3C/svg%3E">
   <style>
     :root {
       --trinity-blue: #1f4e79;
@@ -178,7 +179,7 @@
 
   <!-- Version stamp — bump on each push to confirm tablet has latest -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Landing v2026-05-23-build1
+    Landing v2026-05-23-build2
   </div>
 
   <script>
@@ -244,25 +245,28 @@
         return false;
       }
       const candidates = raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
-      const bad = [];
+
+      // Validate ALL candidates before adding any. Avoids the case where a
+      // paste of "good@x.com, bad" silently adds the good one but never
+      // re-renders the chip list (because we returned early on the bad one).
+      const bad = candidates.filter(addr => !isValidEmail(addr));
+      if (bad.length) {
+        errorEl.textContent = 'Not a valid email: ' + bad.join(', ');
+        emailInput.focus();
+        return false;
+      }
+
       const dupes = [];
       const added = [];
       candidates.forEach(addr => {
         const lower = addr.toLowerCase();
-        if (!isValidEmail(addr)) {
-          bad.push(addr);
-        } else if (recipients.some(r => r.toLowerCase() === lower)) {
+        if (recipients.some(r => r.toLowerCase() === lower)) {
           dupes.push(addr);
         } else {
           recipients.push(addr);
           added.push(addr);
         }
       });
-      if (bad.length) {
-        errorEl.textContent = 'Not a valid email: ' + bad.join(', ');
-        emailInput.focus();
-        return false;
-      }
       if (!added.length && dupes.length) {
         errorEl.textContent = 'Already added: ' + dupes.join(', ');
       } else {

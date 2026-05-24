@@ -3,12 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <!-- Force fresh fetch on every load so iterating on changes is painless.
-       Without this, Android Chrome may serve a cached old copy for hours. -->
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
+  <!-- Note: previously had Cache-Control: no-cache meta tags here. Removed
+       because we now have a real service worker (sw.js) that owns caching
+       and uses stale-while-revalidate to keep the tablet up to date. -->
   <title>Trinity Daily Security Officer Log</title>
+
+  <!-- PWA — manifest + iOS install metadata. The tablet adds this to the
+       home screen and launches it as a standalone app. -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1f4e79">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Trinity Log">
+
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%231f4e79'/%3E%3Ctext x='50%25' y='54%25' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle' dominant-baseline='middle'%3ET%3C/text%3E%3C/svg%3E">
   <style>
     :root {
@@ -392,7 +399,7 @@
        can confirm on the tablet that you're seeing the latest code.
        Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Form v2026-05-23-build2
+    Form v2026-05-24-v1
   </div>
 
 </div>
@@ -424,12 +431,101 @@
 </div>
 
 
+<!-- Dexie: thin IndexedDB wrapper, used to persist the form draft so it
+     survives device sleep, app kill, and reboot. Pinned to a specific
+     version so the cached bytes in the service worker stay deterministic.
+     Loaded synchronously (no defer/async) so window.Dexie is ready by the
+     time the inline <script> below runs. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.7/dexie.min.js"></script>
+
 <script>
   // -------------------------------------------------------
   //  CONFIG
   // -------------------------------------------------------
   // Cloudflare Worker that relays POSTs to Apps Script.
   const WORKER_URL = 'https://daily-log-relay.trinitysecuritylogs.workers.dev/';
+
+  // -------------------------------------------------------
+  //  HR9 — Kill switch.
+  //  If the URL has ?reset=1, blow away every form of local state
+  //  (caches, service worker, IndexedDB, localStorage) and reload.
+  //  This is the customer's escape hatch when the cached app is broken
+  //  and they're tablet-remote with no devtools access.
+  // -------------------------------------------------------
+  (async function maybeKillSwitch() {
+    if (!new URLSearchParams(location.search).has('reset')) return;
+    document.documentElement.innerHTML =
+      '<body style="font-family:sans-serif;padding:40px;text-align:center">' +
+      '<h2>Resetting&hellip;</h2><p>Clearing cache and local data.</p></body>';
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if ('caches' in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map((n) => caches.delete(n)));
+      }
+      try { await indexedDB.deleteDatabase('TrinityDailyLog'); } catch (e) {}
+      try { localStorage.clear(); } catch (e) {}
+    } finally {
+      // Strip ?reset=1 from the URL and reload from the network.
+      const clean = location.origin + location.pathname;
+      location.replace(clean);
+    }
+  })();
+
+  // -------------------------------------------------------
+  //  Service Worker registration. Lives at the repo root so its
+  //  scope covers both Form.html and index.html.
+  // -------------------------------------------------------
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch((err) => {
+        console.warn('[trinity] SW registration failed:', err);
+      });
+    });
+  }
+
+  // -------------------------------------------------------
+  //  Dexie — draft persistence.
+  //  Single record store keyed by id. We only ever store one draft
+  //  ('current'), which gets overwritten on each save and deleted on
+  //  successful submit or explicit Clear (HR3, HR4).
+  // -------------------------------------------------------
+  const draftDb = new Dexie('TrinityDailyLog');
+  draftDb.version(1).stores({ drafts: 'id' });
+
+  async function saveDraftNow(snapshot) {
+    try {
+      await draftDb.drafts.put({
+        id: 'current',
+        savedAt: Date.now(),
+        ...snapshot
+      });
+    } catch (err) {
+      // Don't break the user's session if IndexedDB is unavailable
+      // (private browsing, quota errors, etc.). Just log it.
+      console.warn('[trinity] saveDraft failed:', err);
+    }
+  }
+
+  async function clearDraft() {
+    try {
+      await draftDb.drafts.delete('current');
+    } catch (err) {
+      console.warn('[trinity] clearDraft failed:', err);
+    }
+  }
+
+  async function loadDraft() {
+    try {
+      return await draftDb.drafts.get('current');
+    } catch (err) {
+      console.warn('[trinity] loadDraft failed:', err);
+      return null;
+    }
+  }
 
   // -----------------------------------------------------------
   //  Multi-page log table
@@ -495,6 +591,115 @@
   addPage();
 
   // -----------------------------------------------------------
+  //  HR1/HR2 — Draft restore (silent) + auto-save plumbing.
+  //
+  //  The draft restore is async (Dexie) but tiny — typically <20ms.
+  //  We fire it as soon as the first page is in the DOM, then attach
+  //  the auto-save listener once it resolves so we don't accidentally
+  //  save an empty form over a real draft.
+  //
+  //  Edge case: the user could start typing during those 20ms. We track
+  //  that with _userTouchedForm; if it's true, we skip the restore so
+  //  we don't wipe what they just typed.
+  // -----------------------------------------------------------
+  let _userTouchedForm = false;
+  document.addEventListener(
+    'input',
+    () => { _userTouchedForm = true; },
+    { capture: true, once: true }
+  );
+
+  // Declared up here (instead of next to the auto-mirror logic further
+  // down) because applyDraft below reads/writes it. With `let`'s temporal
+  // dead zone, declaring it later would be a ReferenceError waiting to
+  // happen if the restore ever ran synchronously.
+  let signatureTouched = false;
+
+  function buildDraftSnapshot() {
+    // Note: we deliberately do NOT trim values here (unlike gatherData()).
+    // We want the draft to capture the user's typing verbatim, including
+    // trailing spaces, so a restore puts them back exactly where they were.
+    const rows = [];
+    const total = totalRowCount();
+    for (let i = 1; i <= total; i++) {
+      const tEl = document.querySelector('.row-time[data-row="' + i + '"]');
+      const dEl = document.querySelector('.row-desc[data-row="' + i + '"]');
+      if (!tEl || !dEl) continue;
+      rows.push({
+        time: tEl.value || '',
+        description: dEl.value || ''
+      });
+    }
+    return {
+      dutyOfficer:      document.getElementById('dutyOfficer').value,
+      location:         document.getElementById('location').value,
+      date:             document.getElementById('date').value,
+      startTime:        document.getElementById('startTime').value,
+      endTime:          document.getElementById('endTime').value,
+      officerSignature: document.getElementById('officerSignature').value,
+      rows:             rows
+    };
+  }
+
+  function applyDraft(d) {
+    if (!d) return;
+
+    // 1. Make sure we have enough rows on screen for all saved entries.
+    const neededRows = (d.rows && d.rows.length) || 0;
+    while (totalRowCount() < neededRows) {
+      if (!addPage()) break; // hit MAX_PAGES — extra rows get dropped
+    }
+
+    // 2. Top fields.
+    const set = (id, val) => {
+      const el = document.getElementById(id);
+      if (el && val != null) el.value = val;
+    };
+    set('dutyOfficer',      d.dutyOfficer);
+    set('location',         d.location);
+    set('date',             d.date);
+    set('startTime',        d.startTime);
+    set('endTime',          d.endTime);
+    set('officerSignature', d.officerSignature);
+
+    // 3. Row values. Programmatic value-setting doesn't fire 'input' so
+    //    we also manually apply the .has-content class the listener
+    //    would normally apply.
+    if (d.rows) {
+      d.rows.forEach((r, i) => {
+        const rowNum = i + 1;
+        const tEl = document.querySelector('.row-time[data-row="' + rowNum + '"]');
+        const dEl = document.querySelector('.row-desc[data-row="' + rowNum + '"]');
+        if (!tEl || !dEl) return;
+        tEl.value = r.time || '';
+        dEl.value = r.description || '';
+        const rowDiv = tEl.closest('.row');
+        if (rowDiv) rowDiv.classList.toggle('has-content', !!(r.time || r.description));
+      });
+    }
+
+    // 4. If the saved signature differs from the saved duty officer, the
+    //    officer had hand-typed it — preserve that "touched" state so we
+    //    don't start auto-mirroring duty officer over it after restore.
+    if (d.officerSignature &&
+        d.officerSignature !== d.dutyOfficer) {
+      signatureTouched = true;
+    }
+  }
+
+  // Kick off the restore right now. We track _restoreComplete so the
+  // auto-save handlers (attached later) can refuse to save until either
+  // (a) the restore finished, or (b) the user has clearly typed something.
+  // Otherwise a stray save in the ~50ms restore window could overwrite a
+  // real draft with the still-blank form.
+  let _restoreComplete = false;
+  const draftRestoreReady = (async () => {
+    const draft = await loadDraft();
+    if (draft && !_userTouchedForm) applyDraft(draft);
+    _restoreComplete = true;
+  })();
+
+  // -----------------------------------------------------------
   //  Defaults & live behaviors
   // -----------------------------------------------------------
   // Date defaults to today
@@ -543,10 +748,11 @@
     el.addEventListener('input', () => el.classList.remove('field-error'));
   });
 
-  // Officer Signature auto-mirrors Duty Officer
+  // Officer Signature auto-mirrors Duty Officer.
+  // (Note: `signatureTouched` is declared near the top of the script,
+  // because applyDraft also writes to it during draft restore.)
   const dutyOfficerInput = document.getElementById('dutyOfficer');
   const officerSignatureInput = document.getElementById('officerSignature');
-  let signatureTouched = false;
   officerSignatureInput.addEventListener('input', () => { signatureTouched = true; });
   dutyOfficerInput.addEventListener('input', () => {
     if (!signatureTouched) officerSignatureInput.value = dutyOfficerInput.value;
@@ -746,25 +952,41 @@
     statusActions.style.display = 'none';
     showOverlay(statusOverlay);
 
+    // We classify failures into two buckets so HR8 can show the right
+    // message: 'network' = fetch threw (offline / DNS / TLS / aborted),
+    // 'server' = we got a response but it wasn't ok or the body said so.
     try {
-      const resp = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'processSubmissionFromWebApp',
-          data: data
-        })
-      });
-      const result = await resp.json();
+      let resp;
+      try {
+        resp = await fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'processSubmissionFromWebApp',
+            data: data
+          })
+        });
+      } catch (netErr) {
+        // fetch only throws on real network failures.
+        return onFailure('network', netErr);
+      }
+
+      let result;
+      try {
+        result = await resp.json();
+      } catch (parseErr) {
+        // We got a response, but it wasn't valid JSON — treat as server bug.
+        return onFailure('server', parseErr);
+      }
 
       if (result.ok) {
         onSuccess(result.result);
       } else {
-        onFailure(new Error(result.error || 'Server rejected the submission.'));
+        onFailure('server', new Error(result.error || 'Server rejected the submission.'));
       }
-
     } catch (err) {
-      onFailure(err);
+      // Defensive — shouldn't be reachable, but if it is, classify by online state.
+      onFailure(navigator.onLine ? 'server' : 'network', err);
     }
   }
 
@@ -777,6 +999,8 @@
     statusMsg.textContent =
       'PDF emailed to manager. Resetting form for the next officer…';
     statusActions.style.display = 'none';
+    // HR3 — only on success: nuke the saved draft so the next open is blank.
+    clearDraft();
     setTimeout(resetFormInPlace, 1800);
   }
 
@@ -808,13 +1032,29 @@
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
 
-  function onFailure(err) {
+  function onFailure(kind, err) {
+    // HR5 — draft is preserved automatically: we simply don't touch it.
+    // The next render of the form (or the next Submit tap) will use it.
     lastSubmitOk = false;
     statusModal.className = 'modal error';
-    statusTitle.innerHTML = '✕ Submission failed';
-    statusMsg.textContent =
-      (err && err.message ? err.message : String(err)) +
-      '  —  Please try again. If this keeps happening, contact your manager.';
+
+    // HR8 — the two messages distinguish "your tablet can't reach us"
+    // from "we got there but the server choked." Both reassure the
+    // officer that their typed entries are safe on this tablet.
+    if (kind === 'network') {
+      statusTitle.innerHTML = '✕ No connection';
+      statusMsg.textContent =
+        "Couldn't reach the server. Your log is saved on this tablet. " +
+        "When you have WiFi, tap Submit again.";
+    } else {
+      statusTitle.innerHTML = '✕ Server error';
+      statusMsg.textContent =
+        'Server error: ' +
+        (err && err.message ? err.message : String(err)) +
+        '. Your log is saved on this tablet. Try Submit again, or contact ' +
+        'your manager if this persists.';
+    }
+
     statusActions.style.display = 'flex';
     submitBtn.disabled = false;
     newFormBtn.textContent = 'Close and retry';
@@ -835,8 +1075,56 @@
       .some(el => (el.value || '').trim());
     if (!anyContent) return;
     if (confirm('Clear ALL fields, including officer name, location and every log row?\n\nThis cannot be undone.')) {
+      // HR4 — explicit Clear must also wipe the saved draft, otherwise the
+      // next open of the PWA would restore everything they just cleared.
+      clearDraft();
       resetFormInPlace();
     }
+  });
+
+  // -----------------------------------------------------------
+  //  HR1 — Auto-save on every input (debounced).
+  //
+  //  Listener is delegated on the page root so it catches every field —
+  //  top fields, row times, row descriptions, and any future fields we
+  //  add. Debounced to 500ms so a fast typist doesn't hammer IndexedDB,
+  //  but the spec guarantees a max of ~500ms of typing at risk.
+  //
+  //  We deliberately wait for the initial restore to finish before
+  //  enabling this. Otherwise the first restore-triggered render could
+  //  fight a save that captured the still-empty form.
+  // -----------------------------------------------------------
+  const DRAFT_SAVE_DEBOUNCE_MS = 500;
+  let _saveTimer = null;
+
+  // Guard: don't persist anything until either the restore finished or
+  // the user demonstrably touched the form. See the comment on
+  // _restoreComplete above for why.
+  function safeToSave() {
+    return _restoreComplete || _userTouchedForm;
+  }
+
+  function scheduleDraftSave() {
+    if (!safeToSave()) return;
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => {
+      saveDraftNow(buildDraftSnapshot());
+    }, DRAFT_SAVE_DEBOUNCE_MS);
+  }
+
+  // Attach listeners immediately (not after restoreReady) so that even
+  // an instant tab-hide right after page load can flush a save IF the
+  // user had time to type something.
+  document.querySelector('.page').addEventListener('input', scheduleDraftSave);
+
+  // Also save when the tab is being hidden / closed — flushes any
+  // pending debounced save so we don't lose the last 500ms of typing
+  // if the OS swaps Chrome out the instant the screen locks.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden') return;
+    if (!safeToSave()) return;
+    clearTimeout(_saveTimer);
+    saveDraftNow(buildDraftSnapshot());
   });
 
 </script>

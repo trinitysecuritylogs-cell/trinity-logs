@@ -3,10 +3,17 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
+  <!-- Note: previously had Cache-Control: no-cache meta tags here.
+       Removed because the service worker (sw.js) now owns caching. -->
   <title>Trinity Daily Log</title>
+
+  <!-- PWA — manifest + iOS install metadata. -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1f4e79">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Trinity Log">
+
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%231f4e79'/%3E%3Ctext x='50%25' y='54%25' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle' dominant-baseline='middle'%3ET%3C/text%3E%3C/svg%3E">
   <style>
     :root {
@@ -179,10 +186,50 @@
 
   <!-- Version stamp — bump on each push to confirm tablet has latest -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Landing v2026-05-23-build2
+    Landing v2026-05-24-v1
   </div>
 
   <script>
+    // -------------------------------------------------------
+    //  HR9 — Kill switch.
+    //  Visiting either page with ?reset=1 wipes every form of local
+    //  state (service worker, caches, IndexedDB, localStorage) and
+    //  reloads cleanly. This is the customer's escape hatch when the
+    //  cached app is broken and they can't open devtools on the tablet.
+    // -------------------------------------------------------
+    (async function maybeKillSwitch() {
+      if (!new URLSearchParams(location.search).has('reset')) return;
+      document.documentElement.innerHTML =
+        '<body style="font-family:sans-serif;padding:40px;text-align:center">' +
+        '<h2>Resetting&hellip;</h2><p>Clearing cache and local data.</p></body>';
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        }
+        if ('caches' in window) {
+          const names = await caches.keys();
+          await Promise.all(names.map((n) => caches.delete(n)));
+        }
+        try { await indexedDB.deleteDatabase('TrinityDailyLog'); } catch (e) {}
+        try { localStorage.clear(); } catch (e) {}
+      } finally {
+        location.replace(location.origin + location.pathname);
+      }
+    })();
+
+    // -------------------------------------------------------
+    //  Service Worker registration. Lives at the repo root so its
+    //  scope covers both index.html and Form.html.
+    // -------------------------------------------------------
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch((err) => {
+          console.warn('[trinity] SW registration failed:', err);
+        });
+      });
+    }
+
     // -------------------------------------------------------
     //  CONFIG  — change these two if your setup changes
     // -------------------------------------------------------

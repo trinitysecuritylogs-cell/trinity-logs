@@ -186,7 +186,7 @@
 
   <!-- Version stamp — bump on each push to confirm tablet has latest -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Landing v2026-05-24-v1
+    Landing v2026-05-24-v2
   </div>
 
   <script>
@@ -247,7 +247,16 @@
     // locally. We can't reach Apps Script for the last-saved list
     // anymore (that needed the iframe template variables), so the
     // tablet now remembers it locally via localStorage.
-    const INITIAL_EMAILS = localStorage.getItem('trinity:lastEmails') || '';
+    //
+    // Wrapped in try/catch: Safari's private-browsing mode (and some
+    // locked-down WebViews) throw on localStorage access. We'd rather
+    // start with an empty chip list than crash the whole page.
+    let INITIAL_EMAILS = '';
+    try {
+      INITIAL_EMAILS = localStorage.getItem('trinity:lastEmails') || '';
+    } catch (e) {
+      console.warn('[trinity] localStorage read failed:', e);
+    }
 
     const emailInput = document.getElementById('email');
     const addBtn     = document.getElementById('addBtn');
@@ -325,7 +334,33 @@
       return added.length > 0;
     }
 
-    async function go() {
+    // ----------------------------------------------------------------
+    //  go() — handler for the Start button.
+    //
+    //  Per SPEC-landing-offline-addendum (HR1-HR5): the Landing page
+    //  must NEVER block the officer from reaching Form.html. Offline,
+    //  unstable WiFi, dead Worker — none of those can keep them on
+    //  this page. The chain is:
+    //
+    //    1. Local validation (non-empty recipients, valid format).
+    //       This is the ONLY thing that can prevent navigation.
+    //    2. Save recipients to localStorage so the chips
+    //       pre-populate next session.  (HR2)
+    //    3. Fire a best-effort POST to the Worker to sync the
+    //       recipient list to PropertiesService.  (HR3)
+    //       - keepalive:true lets the request outlive the navigation
+    //         we trigger in step 4, so we get the server sync for
+    //         free without making the officer wait for it.
+    //       - Failures (offline, timeout, 5xx, JSON garbage) are
+    //         swallowed — see HR4.
+    //    4. Navigate to Form.html, regardless of step 3's outcome.
+    //       (HR1)
+    //
+    //  We deliberately do NOT show a "Loading\u2026" spinner anymore
+    //  (Option A in the spec). The navigation is effectively
+    //  instant, so a spinner would just be a lie offline.
+    // ----------------------------------------------------------------
+    function go() {
       // If the user typed something but forgot to tap Add, fold it in now.
       if ((emailInput.value || '').trim()) {
         addEmail();
@@ -337,37 +372,49 @@
         return;
       }
       errorEl.textContent = '';
-      startBtn.disabled = true;
-      startBtn.textContent = 'Loading\u2026';
 
+      // Guard against double-tap. We don't re-enable because the very
+      // next line begins a navigation that destroys this page.
+      if (startBtn.disabled) return;
+      startBtn.disabled = true;
+
+      // HR2 — ALWAYS persist locally before navigating away. Wrapped
+      // because localStorage can throw (quota exceeded, private mode,
+      // locked-down WebView). A failed save here is unfortunate but
+      // must not block the officer.
       try {
-        const resp = await fetch(WORKER_URL, {
+        localStorage.setItem('trinity:lastEmails', recipients.join(','));
+      } catch (e) {
+        console.warn('[trinity] localStorage write failed:', e);
+      }
+
+      // HR3 / HR4 — Best-effort server sync. keepalive:true tells the
+      // browser to keep the POST in flight even after we navigate away
+      // a few lines down. We don't await it: the network result, if
+      // any, never reaches this page's JS (we're gone). Errors thrown
+      // synchronously by fetch() (extremely rare) are caught so they
+      // can't trip the navigation.
+      try {
+        fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'saveLastEmails',
             emails: recipients
-          })
+          }),
+          keepalive: true
+        }).catch((err) => {
+          // Promise rejection lands here when offline / DNS fails /
+          // CORS blocks / etc. Log only — HR4 says non-blocking.
+          console.warn('[trinity] email sync failed (offline?):', err);
         });
-        const result = await resp.json();
-
-        if (!result.ok) {
-          throw new Error(result.error || 'Server rejected the request.');
-        }
-
-        // Remember locally for next session's pre-population
-        localStorage.setItem('trinity:lastEmails', recipients.join(','));
-
-        // Navigate to the form
-        window.location.href = FORM_URL;
-
       } catch (err) {
-        errorEl.textContent =
-          (err && err.message) ? err.message
-            : 'Could not save the emails. Check Wi-Fi and try again.';
-        startBtn.disabled = false;
-        startBtn.textContent = 'Start';
+        console.warn('[trinity] could not start email sync:', err);
       }
+
+      // HR1 — Always navigate. Relative URL so it works inside the
+      // PWA scope (and is precached by sw.js for offline use).
+      window.location.href = FORM_URL;
     }
 
     addBtn.addEventListener('click', addEmail);
@@ -378,6 +425,43 @@
         addEmail();
       }
     });
+
+    // ----------------------------------------------------------------
+    //  NTH1 — Offline indicator.
+    //
+    //  Subtle gray note above the Start button, shown only when
+    //  navigator.onLine reports false. This honors HR5 ("don't lie to
+    //  the officer"): if their changes won't reach the server right
+    //  now, say so plainly. The wording avoids alarm — Start still
+    //  works, the recipient list just defers to next online session.
+    //
+    //  navigator.onLine is famously unreliable (it can say "true" on
+    //  a captive-portal WiFi with no real upstream), so we treat this
+    //  as best-effort: when it says we're offline, it usually is;
+    //  when it says we're online, the keepalive fetch in go() is the
+    //  real test. The note responds to live online/offline events so
+    //  it appears the moment connectivity drops while the officer is
+    //  still on this page.
+    // ----------------------------------------------------------------
+    const offlineNote = document.createElement('div');
+    offlineNote.id = 'offlineNote';
+    offlineNote.setAttribute('role', 'status');
+    offlineNote.setAttribute('aria-live', 'polite');
+    offlineNote.style.cssText =
+      'font-size:12px; color:#6b6b6b; margin:0 0 10px; text-align:center;';
+    offlineNote.textContent =
+      'Offline — recipient list will sync when you have Wi-Fi.';
+    offlineNote.hidden = true;
+    startBtn.parentNode.insertBefore(offlineNote, startBtn);
+
+    function updateOfflineNote() {
+      // navigator.onLine === false is the only safe "definitely offline"
+      // signal. true / undefined both mean "maybe online, don't claim".
+      offlineNote.hidden = navigator.onLine !== false;
+    }
+    updateOfflineNote();
+    window.addEventListener('online',  updateOfflineNote);
+    window.addEventListener('offline', updateOfflineNote);
 
     // Seed chips from the last saved session
     if (INITIAL_EMAILS) {

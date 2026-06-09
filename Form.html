@@ -115,7 +115,7 @@
     }
     .row, .row-header {
       display: grid;
-      grid-template-columns: 140px 1fr;
+      grid-template-columns: 140px 1fr 56px;
       align-items: stretch;
     }
     .row-header {
@@ -127,8 +127,14 @@
     .row-header > div {
       padding: 10px 12px;
     }
-    .row-header .cell-desc {
+    .row-header .cell-desc,
+    .row-header .cell-hl {
       border-left: 1px solid rgba(255,255,255,0.3);
+    }
+    .row-header .cell-hl {
+      padding: 10px 4px;
+      text-align: center;
+      font-size: 12px;
     }
     .row + .row {
       border-top: 1px solid var(--line);
@@ -171,6 +177,42 @@
       box-shadow: inset 0 0 0 2px var(--trinity-blue);
     }
     .row.has-content .cell-time { background: #fafcff; }
+
+    /* ---------- Row highlight (officer marks important entries) ---------- */
+    .row .cell-hl {
+      border-left: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    button.hl-btn {
+      width: 36px;
+      height: 36px;
+      padding: 0;
+      border-radius: 50%;
+      border: 2px solid var(--line);
+      background: #fff;
+      color: #9aa7b5;
+      font-size: 17px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    button.hl-btn:hover { border-color: #c9a400; color: #c9a400; }
+    /* These come AFTER the .has-content rule on purpose: equal specificity
+       means source order decides, and highlight must win the background. */
+    .row.highlighted .cell-time,
+    .row.highlighted .cell-desc { background: #fff6bf; }
+    /* Match the PDF output: highlighted entries are bold dark-red. */
+    .row.highlighted .row-time,
+    .row.highlighted .row-desc {
+      font-weight: 700;
+      color: #8f1500;
+    }
+    .row.highlighted button.hl-btn {
+      background: #ffd84d;
+      border-color: #c9a400;
+      color: #6b5300;
+    }
 
     /* ---------- Page divider ---------- */
     .page-divider {
@@ -342,7 +384,7 @@
       }
       button.submit-btn,
       button.clear-btn { width: 100%; min-width: 0; }
-      .row, .row-header { grid-template-columns: 90px 1fr; }
+      .row, .row-header { grid-template-columns: 90px 1fr 48px; }
     }
   </style>
 </head>
@@ -399,7 +441,7 @@
        can confirm on the tablet that you're seeing the latest code.
        Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Form v2026-05-24-v1
+    Form v2026-06-08-v1
   </div>
 
 </div>
@@ -444,6 +486,27 @@
   // -------------------------------------------------------
   // Cloudflare Worker that relays POSTs to Apps Script.
   const WORKER_URL = 'https://daily-log-relay.trinitysecuritylogs.workers.dev/';
+
+  // -------------------------------------------------------
+  //  Recipients.
+  //  The landing page (index.html) saves the email list this tablet
+  //  sends to in localStorage under 'trinity:lastEmails'. Recipients are
+  //  no longer stored server-side — each submission carries its own, so
+  //  different tablets can target different inboxes. We read the list
+  //  here and ship it inside the submission payload.
+  //
+  //  Wrapped in try/catch: localStorage throws in some locked-down
+  //  WebViews / private mode. An empty list is caught at submit time.
+  // -------------------------------------------------------
+  function getRecipients() {
+    let raw = '';
+    try {
+      raw = localStorage.getItem('trinity:lastEmails') || '';
+    } catch (e) {
+      console.warn('[trinity] recipients read failed:', e);
+    }
+    return raw.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
+  }
 
   // -------------------------------------------------------
   //  HR9 — Kill switch.
@@ -546,7 +609,8 @@
     header.className = 'row-header';
     header.innerHTML =
       '<div class="cell-time">Time</div>' +
-      '<div class="cell-desc">Description</div>';
+      '<div class="cell-desc">Description</div>' +
+      '<div class="cell-hl">Mark</div>';
     section.appendChild(header);
 
     const startRow = (pageNum - 1) * ROWS_PER_PAGE + 1;
@@ -564,7 +628,10 @@
           'class="row-time" data-row="' + i + '"></div>' +
         '<div class="cell-desc"><textarea autocomplete="off" rows="2" ' +
           'enterkeyhint="next" class="row-desc" ' +
-          'data-row="' + i + '" placeholder="Log entry…"></textarea></div>';
+          'data-row="' + i + '" placeholder="Log entry…"></textarea></div>' +
+        '<div class="cell-hl"><button type="button" class="hl-btn" ' +
+          'aria-pressed="false" aria-label="Highlight row ' + i + '" ' +
+          'data-row="' + i + '">★</button></div>';
       section.appendChild(row);
     }
 
@@ -625,9 +692,11 @@
       const tEl = document.querySelector('.row-time[data-row="' + i + '"]');
       const dEl = document.querySelector('.row-desc[data-row="' + i + '"]');
       if (!tEl || !dEl) continue;
+      const rowDiv = tEl.closest('.row');
       rows.push({
         time: tEl.value || '',
-        description: dEl.value || ''
+        description: dEl.value || '',
+        highlight: !!(rowDiv && rowDiv.classList.contains('highlighted'))
       });
     }
     return {
@@ -674,7 +743,12 @@
         tEl.value = r.time || '';
         dEl.value = r.description || '';
         const rowDiv = tEl.closest('.row');
-        if (rowDiv) rowDiv.classList.toggle('has-content', !!(r.time || r.description));
+        if (rowDiv) {
+          rowDiv.classList.toggle('has-content', !!(r.time || r.description));
+          rowDiv.classList.toggle('highlighted', !!r.highlight);
+          const hlBtn = rowDiv.querySelector('.hl-btn');
+          if (hlBtn) hlBtn.setAttribute('aria-pressed', String(!!r.highlight));
+        }
       });
     }
 
@@ -825,6 +899,22 @@
     }
   });
 
+  // Highlight toggle — delegated on logPages like the other row events,
+  // so it works for rows on pages added later. NOTE: button clicks do
+  // NOT fire 'input', so the auto-save plumbing below would never see
+  // this change — we must mark the form as touched and schedule the
+  // draft save ourselves.
+  logPages.addEventListener('click', e => {
+    const btn = e.target.closest ? e.target.closest('.hl-btn') : null;
+    if (!btn) return;
+    const row = btn.closest('.row');
+    if (!row) return;
+    const on = row.classList.toggle('highlighted');
+    btn.setAttribute('aria-pressed', String(on));
+    _userTouchedForm = true;
+    scheduleDraftSave();
+  });
+
   // -----------------------------------------------------------
   //  Submit flow
   // -----------------------------------------------------------
@@ -846,9 +936,11 @@
       const tEl = document.querySelector('.row-time[data-row="' + i + '"]');
       const dEl = document.querySelector('.row-desc[data-row="' + i + '"]');
       if (!tEl || !dEl) continue;
+      const rowDiv = tEl.closest('.row');
       rows.push({
         time: (tEl.value || '').trim(),
-        description: (dEl.value || '').trim()
+        description: (dEl.value || '').trim(),
+        highlight: !!(rowDiv && rowDiv.classList.contains('highlighted'))
       });
     }
     return {
@@ -859,7 +951,8 @@
       endTime:          document.getElementById('endTime').value,
       officerSignature: document.getElementById('officerSignature').value.trim()
                           || document.getElementById('dutyOfficer').value.trim(),
-      rows:             rows
+      rows:             rows,
+      recipients:       getRecipients()
     };
   }
 
@@ -901,6 +994,15 @@
     const missing = validate(data);
     if (missing.length) {
       alert('Please complete: ' + missing.join(', '));
+      return;
+    }
+
+    // Can't email a log with no destination. This tablet's recipient list
+    // is set on the Start screen; if it's empty, send them back there.
+    if (!data.recipients.length) {
+      alert('No email recipient is set for this tablet.\n\n' +
+            'Go back to the Start screen and add at least one email ' +
+            'address before submitting.');
       return;
     }
 

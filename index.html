@@ -186,7 +186,7 @@
 
   <!-- Version stamp — bump on each push to confirm tablet has latest -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Landing v2026-05-24-v2
+    Landing v2026-06-08-v1
   </div>
 
   <script>
@@ -231,16 +231,12 @@
     }
 
     // -------------------------------------------------------
-    //  CONFIG  — change these two if your setup changes
+    //  CONFIG
     // -------------------------------------------------------
-    // Cloudflare Worker that relays to Apps Script. This is where every
-    // POST from this page goes — it forwards to the Apps Script doGet
-    // (because Apps Script doPost is currently broken at the platform
-    // level for many accounts, as of late 2025).
-    const WORKER_URL = 'https://daily-log-relay.trinitysecuritylogs.workers.dev/';
-
     // Where to send the user after they pick recipients. Relative path
     // since both files are served from the same GitHub Pages origin.
+    // (This page no longer talks to the server at all — it just saves
+    // the recipient list to localStorage; the form sends it onward.)
     const FORM_URL = 'Form.html';
 
     // On first load, try to pre-populate recipients from a list saved
@@ -388,29 +384,11 @@
         console.warn('[trinity] localStorage write failed:', e);
       }
 
-      // HR3 / HR4 — Best-effort server sync. keepalive:true tells the
-      // browser to keep the POST in flight even after we navigate away
-      // a few lines down. We don't await it: the network result, if
-      // any, never reaches this page's JS (we're gone). Errors thrown
-      // synchronously by fetch() (extremely rare) are caught so they
-      // can't trip the navigation.
-      try {
-        fetch(WORKER_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'saveLastEmails',
-            emails: recipients
-          }),
-          keepalive: true
-        }).catch((err) => {
-          // Promise rejection lands here when offline / DNS fails /
-          // CORS blocks / etc. Log only — HR4 says non-blocking.
-          console.warn('[trinity] email sync failed (offline?):', err);
-        });
-      } catch (err) {
-        console.warn('[trinity] could not start email sync:', err);
-      }
+      // NOTE: we used to also POST the list to the server here
+      // (action:'saveLastEmails') to stash it in PropertiesService.
+      // That's gone — recipients are no longer stored server-side; the
+      // form reads this tablet's localStorage list and sends it inside
+      // each submission. The localStorage save above is all we need.
 
       // HR1 — Always navigate. Relative URL so it works inside the
       // PWA scope (and is precached by sw.js for offline use).

@@ -1101,16 +1101,6 @@
     scheduleDraftSave();
   });
 
-  // Keep the on-screen keyboard up (and the page from jumping) when tapping a
-  // Style button mid-entry. A <button> normally steals focus from the field
-  // being edited → keyboard closes → the page reflows and the officer loses
-  // their line. preventDefault on mousedown cancels that focus-steal; the
-  // click above still fires, so the cycle still works. Delegated so it covers
-  // rows added later.
-  logPages.addEventListener('mousedown', e => {
-    if (e.target.closest && e.target.closest('.mark-btn')) e.preventDefault();
-  });
-
   // -----------------------------------------------------------
   //  Submit flow
   // -----------------------------------------------------------

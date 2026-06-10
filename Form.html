@@ -249,7 +249,7 @@
     }
     .row .cell-time {
       display: flex;
-      align-items: flex-start;
+      align-items: flex-start;   /* time sits at the top, on the same horizon as the description's first line */
     }
     .row input,
     .row textarea {
@@ -264,7 +264,7 @@
       line-height: 1.4;
     }
     .row input.row-time {
-      height: var(--row-height);
+      height: var(--row-height);   /* one line, top-aligned with the description text */
       padding: 0 16px;
       font-variant-numeric: tabular-nums;
       color: var(--label);
@@ -274,17 +274,29 @@
       resize: none;
       overflow: hidden;
     }
-    .row input:focus,
+    /* Description: the textarea fills its cell, so its own focus box already
+       spans the whole cell. */
     .row textarea:focus {
       outline: none;
+      background: var(--surface-sunk);
+      box-shadow: inset 0 0 0 2px var(--trinity-blue);
+    }
+    /* Time: a one-line input pinned to the TOP of a cell that can be taller
+       (when the neighbouring description wraps). So we draw the focus box on
+       the CELL via :focus-within — it fills the full height — while the
+       input's text stays top-aligned. The input itself draws nothing. */
+    .row input.row-time:focus { outline: none; }
+    .row .cell-time:focus-within {
       background: var(--surface-sunk);
       box-shadow: inset 0 0 0 2px var(--trinity-blue);
     }
     /* Fast-entry aid: the whole active row lights up with a blue left rail,
        so a head-down officer always sees exactly which line they're on. */
     .row:focus-within { background: var(--surface-sunk); }
-    .row:focus-within .cell-time { box-shadow: inset 4px 0 0 0 var(--trinity-blue); }
-    .row.has-content .cell-time { background: var(--surface-sunk); }
+    /* NOTE: deliberately no persistent background on .has-content rows. The
+       blue "current row" look now comes ONLY from :focus-within (while you're
+       actually editing). A filled-but-unfocused row stays plain, so blue
+       always means "editing here" and never lingers. */
     .row.has-content .row-time { color: var(--text); }
 
     /* ---------- Row highlight (officer marks important entries) ---------- */
@@ -336,7 +348,11 @@
       border-radius: 50%;
       background: currentColor;
     }
-    button.hl-btn:hover { background: rgba(224, 169, 0, 0.12); color: var(--hl-accent); }
+    /* Only on real pointers (mouse). On touch, :hover "sticks" after a tap
+       and would leave the button tinted amber until you tap elsewhere. */
+    @media (hover: hover) {
+      button.hl-btn:hover { background: rgba(224, 169, 0, 0.12); color: var(--hl-accent); }
+    }
     button.hl-btn:active { transform: scale(0.9); }
     button.hl-btn:focus-visible {
       outline: none;
@@ -345,7 +361,8 @@
     /* These come AFTER the .has-content rule on purpose: equal specificity
        means source order decides, and highlight must win the background. */
     .row.highlighted .cell-time,
-    .row.highlighted .cell-desc { background: var(--hl-bg); }
+    .row.highlighted .cell-desc,
+    .row.highlighted .cell-hl { background: var(--hl-bg); }
     /* Match the PDF output: highlighted entries are bold dark-red. */
     .row.highlighted .row-time,
     .row.highlighted .row-desc {
@@ -356,6 +373,14 @@
        no chip needed, the highlighted row already carries the state. */
     .row.highlighted button.hl-btn {
       color: var(--hl-ink);
+    }
+    /* Editing a field on a flagged row keeps the YELLOW — the flag colour wins
+       over the normal blue editing tint (for both time input and description).
+       An amber inset border still shows which field is focused, in-theme. */
+    .row.highlighted textarea:focus,
+    .row.highlighted .cell-time:focus-within {
+      background: var(--hl-bg);
+      box-shadow: inset 0 0 0 2px var(--hl-accent);
     }
 
     /* ---------- Page divider ---------- */
@@ -512,8 +537,13 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .field-error {
+      /* Clear, legible invalid-input cue. The INSET shadow draws a visible red
+         outline even on the log inputs (which have border:0, so border-color
+         alone did nothing); border-color still covers the bordered top fields;
+         the faint wash reinforces it. Solid red — not the old 15% that read grey. */
       border-color: var(--error) !important;
-      box-shadow: 0 0 0 2px rgba(176, 0, 32, 0.15) !important;
+      box-shadow: inset 0 0 0 2px var(--error) !important;
+      background: rgba(194, 16, 46, 0.07) !important;
     }
 
     /* ---------- Clear button ---------- */
@@ -610,7 +640,7 @@
        can confirm on the tablet that you're seeing the latest code.
        Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Form v2026-06-08-v1
+    Form v2026-06-10-v1
   </div>
 
 </div>
@@ -975,10 +1005,7 @@
       el.classList.remove('field-error');
     });
     el.addEventListener('blur', () => {
-      formatTimeInput(el);
-      if (el.value && !isValidTime(el.value)) {
-        el.classList.add('field-error');
-      }
+      formatTimeInput(el);   // tidy 1330 → 13:30; invalid-time flag removed per request
     });
   });
 
@@ -1027,10 +1054,7 @@
   logPages.addEventListener('focusout', e => {
     const t = e.target;
     if (t && t.classList && t.classList.contains('row-time')) {
-      formatTimeInput(t);
-      if (t.value && !isValidTime(t.value)) {
-        t.classList.add('field-error');
-      }
+      formatTimeInput(t);   // tidy formatting only; invalid-time flag removed per request
     }
   });
 

@@ -23,7 +23,7 @@
  * footers ("Form v2026-…") should be bumped in lockstep with this.
  * ------------------------------------------------------------------ */
 
-const SW_VERSION = '2026-06-08-v1';
+const SW_VERSION = '2026-06-10-v1';
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
@@ -53,6 +53,7 @@ workbox.precaching.precacheAndRoute([
   { url: 'index.html',                                                       revision: SW_VERSION },
   { url: 'Form.html',                                                        revision: SW_VERSION },
   { url: 'manifest.json',                                                    revision: SW_VERSION },
+  { url: 'inter.woff2',                                                      revision: null },
   { url: 'https://cdnjs.cloudflare.com/ajax/libs/dexie/3.2.7/dexie.min.js',  revision: null }
 ]);
 

@@ -306,79 +306,50 @@
       align-items: center;
       justify-content: center;
     }
-    /* The "Mark" control flags an entry as IMPORTANT — "look here" (flagged
-       rows print bold dark-red in the emailed PDF, an alert tone). The JS
-       writes a literal "★" as the button's text; a star says "favorite", the
-       wrong word. We can't touch the JS, so we hide that glyph (font-size:0)
-       and draw an EXCLAMATION from two pseudo-elements — a bar (::before) and
-       a dot (::after). No border or fill in the resting state: the icon IS
-       the control, so the Mark cell no longer nests a box inside a box.
-       Colour carries the state (grey → amber on hover → alert-red when
-       flagged), backed up by the row's own red+yellow highlight. */
-    button.hl-btn {
-      position: relative;
+    /* The "Style" control cycles a row's formatting on each tap:
+       none → bold → highlight → both → none. One button. It shows a live
+       "Aa" preview styled with the row's CURRENT state, so the button looks
+       like what the entry (and the emailed PDF) will look like. */
+    button.mark-btn {
       width: 44px;
       height: 44px;
       padding: 0;
-      border: 0;
-      background: transparent;
-      border-radius: 9px;          /* shape for hover / focus feedback only */
-      color: var(--line-strong);   /* resting "!" ink */
-      font-size: 0;                /* hide the JS-rendered ★ glyph */
+      border: 1.5px solid var(--line);
+      background: var(--surface);
+      border-radius: var(--radius-sm);
+      color: var(--label);
+      font-size: var(--fs-sm);
+      font-weight: 400;
+      line-height: 1;
       cursor: pointer;
-      transition: transform .08s ease, color .12s ease, background .12s ease;
+      transition: transform .08s ease, background .12s ease, border-color .12s ease;
     }
-    button.hl-btn::before {        /* exclamation bar */
-      content: "";
-      position: absolute;
-      top: 11px;
-      left: 20px;
-      width: 4px;
-      height: 16px;
-      border-radius: 2px;
-      background: currentColor;
-    }
-    button.hl-btn::after {         /* exclamation dot */
-      content: "";
-      position: absolute;
-      top: 30px;
-      left: 20px;
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      background: currentColor;
-    }
-    /* Only on real pointers (mouse). On touch, :hover "sticks" after a tap
-       and would leave the button tinted amber until you tap elsewhere. */
+    button.mark-btn:active { transform: scale(0.92); }
+    button.mark-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+    /* Desktop-only hover (touch :hover sticks after a tap). */
     @media (hover: hover) {
-      button.hl-btn:hover { background: rgba(224, 169, 0, 0.12); color: var(--hl-accent); }
+      button.mark-btn:hover { background: #f0f2f5; }
     }
-    button.hl-btn:active { transform: scale(0.9); }
-    button.hl-btn:focus-visible {
-      outline: none;
-      box-shadow: var(--focus-ring);
-    }
-    /* These come AFTER the .has-content rule on purpose: equal specificity
-       means source order decides, and highlight must win the background. */
-    .row.highlighted .cell-time,
-    .row.highlighted .cell-desc,
-    .row.highlighted .cell-hl { background: var(--hl-bg); }
-    /* Match the PDF output: highlighted entries are bold dark-red. */
-    .row.highlighted .row-time,
-    .row.highlighted .row-desc {
-      font-weight: 700;
-      color: var(--hl-ink);
-    }
-    /* Flagged: the "!" turns alert-red to match the bold dark-red entry text —
-       no chip needed, the highlighted row already carries the state. */
-    .row.highlighted button.hl-btn {
-      color: var(--hl-ink);
-    }
-    /* Editing a field on a flagged row keeps the YELLOW — the flag colour wins
-       over the normal blue editing tint (for both time input and description).
-       An amber inset border still shows which field is focused, in-theme. */
-    .row.highlighted textarea:focus,
-    .row.highlighted .cell-time:focus-within {
+
+    /* ----- Row formatting states (independent of each other) ----- */
+    /* Bold: heavier text, plain black — no colour change. */
+    .row.is-bold .row-time,
+    .row.is-bold .row-desc { font-weight: 700; }
+    /* Highlight: yellow stripe behind all three cells; text weight unchanged.
+       Comes AFTER .has-content on purpose so the yellow wins the background. */
+    .row.is-hl .cell-time,
+    .row.is-hl .cell-desc,
+    .row.is-hl .cell-hl { background: var(--hl-bg); }
+
+    /* The button mirrors the row's state as a preview: bold → bold "Aa";
+       highlight → yellow swatch. Both stack. */
+    .row.is-bold button.mark-btn { font-weight: 800; color: var(--text); }
+    .row.is-hl   button.mark-btn { background: var(--hl-bg); border-color: var(--hl-accent); color: var(--text); }
+
+    /* Editing a field on a highlighted row keeps the YELLOW (highlight wins
+       over the normal blue editing tint); amber inset border still shows focus. */
+    .row.is-hl textarea:focus,
+    .row.is-hl .cell-time:focus-within {
       background: var(--hl-bg);
       box-shadow: inset 0 0 0 2px var(--hl-accent);
     }
@@ -640,7 +611,7 @@
        can confirm on the tablet that you're seeing the latest code.
        Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Form v2026-06-10-v1
+    Form v2026-06-10-v2
   </div>
 
 </div>
@@ -809,7 +780,7 @@
     header.innerHTML =
       '<div class="cell-time">Time</div>' +
       '<div class="cell-desc">Description</div>' +
-      '<div class="cell-hl">Mark</div>';
+      '<div class="cell-hl">Style</div>';
     section.appendChild(header);
 
     const startRow = (pageNum - 1) * ROWS_PER_PAGE + 1;
@@ -828,9 +799,9 @@
         '<div class="cell-desc"><textarea autocomplete="off" rows="2" ' +
           'enterkeyhint="next" class="row-desc" ' +
           'data-row="' + i + '" placeholder="Log entry…"></textarea></div>' +
-        '<div class="cell-hl"><button type="button" class="hl-btn" ' +
-          'aria-pressed="false" aria-label="Highlight row ' + i + '" ' +
-          'data-row="' + i + '">★</button></div>';
+        '<div class="cell-hl"><button type="button" class="mark-btn" ' +
+          'aria-label="Row ' + i + ' formatting: none. Tap to cycle bold, highlight, both." ' +
+          'data-row="' + i + '">Aa</button></div>';
       section.appendChild(row);
     }
 
@@ -895,7 +866,8 @@
       rows.push({
         time: tEl.value || '',
         description: dEl.value || '',
-        highlight: !!(rowDiv && rowDiv.classList.contains('highlighted'))
+        bold:      !!(rowDiv && rowDiv.classList.contains('is-bold')),
+        highlight: !!(rowDiv && rowDiv.classList.contains('is-hl'))
       });
     }
     return {
@@ -944,9 +916,14 @@
         const rowDiv = tEl.closest('.row');
         if (rowDiv) {
           rowDiv.classList.toggle('has-content', !!(r.time || r.description));
-          rowDiv.classList.toggle('highlighted', !!r.highlight);
-          const hlBtn = rowDiv.querySelector('.hl-btn');
-          if (hlBtn) hlBtn.setAttribute('aria-pressed', String(!!r.highlight));
+          // New drafts carry `bold` + `highlight`. Old drafts had only
+          // `highlight` (coupled bold+stripe) — restore those as "both".
+          const hl = !!r.highlight;
+          const bold = (r.bold === undefined) ? hl : !!r.bold;
+          rowDiv.classList.toggle('is-bold', bold);
+          rowDiv.classList.toggle('is-hl', hl);
+          const mb = rowDiv.querySelector('.mark-btn');
+          if (mb) mb.setAttribute('aria-label', markLabel(rowNum, bold, hl));
         }
       });
     }
@@ -1092,18 +1069,35 @@
     }
   });
 
-  // Highlight toggle — delegated on logPages like the other row events,
-  // so it works for rows on pages added later. NOTE: button clicks do
-  // NOT fire 'input', so the auto-save plumbing below would never see
-  // this change — we must mark the form as touched and schedule the
-  // draft save ourselves.
+  // Style cycle — delegated on logPages so it works for rows added later.
+  // Each tap advances: none → bold → highlight → both → none, expressed as
+  // two independent classes (.is-bold, .is-hl). NOTE: button clicks don't
+  // fire 'input', so we mark the form touched and schedule the draft save
+  // ourselves, same as before.
+  function markLabel(rowNum, bold, hl) {
+    const state = (bold && hl) ? 'bold + highlight'
+                : bold ? 'bold'
+                : hl ? 'highlight'
+                : 'none';
+    return 'Row ' + rowNum + ' formatting: ' + state
+         + '. Tap to cycle bold, highlight, both.';
+  }
   logPages.addEventListener('click', e => {
-    const btn = e.target.closest ? e.target.closest('.hl-btn') : null;
+    const btn = e.target.closest ? e.target.closest('.mark-btn') : null;
     if (!btn) return;
     const row = btn.closest('.row');
     if (!row) return;
-    const on = row.classList.toggle('highlighted');
-    btn.setAttribute('aria-pressed', String(on));
+    const bold = row.classList.contains('is-bold');
+    const hl   = row.classList.contains('is-hl');
+    // Advance one step: none → bold → highlight → both → none.
+    let nb, nh;
+    if (!bold && !hl)     { nb = true;  nh = false; }
+    else if (bold && !hl) { nb = false; nh = true;  }
+    else if (!bold && hl) { nb = true;  nh = true;  }
+    else                  { nb = false; nh = false; }
+    row.classList.toggle('is-bold', nb);
+    row.classList.toggle('is-hl', nh);
+    btn.setAttribute('aria-label', markLabel(row.dataset.row, nb, nh));
     _userTouchedForm = true;
     scheduleDraftSave();
   });
@@ -1133,7 +1127,8 @@
       rows.push({
         time: (tEl.value || '').trim(),
         description: (dEl.value || '').trim(),
-        highlight: !!(rowDiv && rowDiv.classList.contains('highlighted'))
+        bold:      !!(rowDiv && rowDiv.classList.contains('is-bold')),
+        highlight: !!(rowDiv && rowDiv.classList.contains('is-hl'))
       });
     }
     return {

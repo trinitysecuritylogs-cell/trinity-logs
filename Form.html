@@ -800,7 +800,7 @@
           'enterkeyhint="next" class="row-desc" ' +
           'data-row="' + i + '" placeholder="Log entry…"></textarea></div>' +
         '<div class="cell-hl"><button type="button" class="mark-btn" ' +
-          'aria-label="Row ' + i + ' formatting: none. Tap to cycle bold, highlight, both." ' +
+          'aria-label="Row ' + i + ' formatting: none. Tap to cycle: bold, then bold + highlight." ' +
           'data-row="' + i + '">Aa</button></div>';
       section.appendChild(row);
     }
@@ -1077,10 +1077,9 @@
   function markLabel(rowNum, bold, hl) {
     const state = (bold && hl) ? 'bold + highlight'
                 : bold ? 'bold'
-                : hl ? 'highlight'
                 : 'none';
     return 'Row ' + rowNum + ' formatting: ' + state
-         + '. Tap to cycle bold, highlight, both.';
+         + '. Tap to cycle: bold, then bold + highlight.';
   }
   logPages.addEventListener('click', e => {
     const btn = e.target.closest ? e.target.closest('.mark-btn') : null;
@@ -1089,12 +1088,12 @@
     if (!row) return;
     const bold = row.classList.contains('is-bold');
     const hl   = row.classList.contains('is-hl');
-    // Advance one step: none → bold → highlight → both → none.
+    // Advance one step: none → bold → bold+highlight → none.
+    // Highlight only ever comes WITH bold — there is no highlight-on-its-own.
     let nb, nh;
-    if (!bold && !hl)     { nb = true;  nh = false; }
-    else if (bold && !hl) { nb = false; nh = true;  }
-    else if (!bold && hl) { nb = true;  nh = true;  }
-    else                  { nb = false; nh = false; }
+    if (!bold && !hl)     { nb = true;  nh = false; }  // none → bold
+    else if (bold && !hl) { nb = true;  nh = true;  }  // bold → bold + highlight
+    else                  { nb = false; nh = false; }  // both → none
     row.classList.toggle('is-bold', nb);
     row.classList.toggle('is-hl', nh);
     btn.setAttribute('aria-label', markLabel(row.dataset.row, nb, nh));

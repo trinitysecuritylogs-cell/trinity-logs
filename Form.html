@@ -611,7 +611,7 @@
        can confirm on the tablet that you're seeing the latest code.
        Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Form v2026-06-10-v2
+    Form v2026-06-10-v3
   </div>
 
 </div>
@@ -1099,6 +1099,16 @@
     btn.setAttribute('aria-label', markLabel(row.dataset.row, nb, nh));
     _userTouchedForm = true;
     scheduleDraftSave();
+  });
+
+  // Keep the on-screen keyboard up (and the page from jumping) when tapping a
+  // Style button mid-entry. A <button> normally steals focus from the field
+  // being edited → keyboard closes → the page reflows and the officer loses
+  // their line. preventDefault on mousedown cancels that focus-steal; the
+  // click above still fires, so the cycle still works. Delegated so it covers
+  // rows added later.
+  logPages.addEventListener('mousedown', e => {
+    if (e.target.closest && e.target.closest('.mark-btn')) e.preventDefault();
   });
 
   // -----------------------------------------------------------

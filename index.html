@@ -16,88 +16,197 @@
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%231f4e79'/%3E%3Ctext x='50%25' y='54%25' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle' dominant-baseline='middle'%3ET%3C/text%3E%3C/svg%3E">
   <style>
+    /* Bundled UI font — see Form.html for the full note. Self-hosted so the
+       PWA renders the same Inter on every device, online or offline. */
+    @font-face {
+      font-family: 'Inter';
+      src: url('inter.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    /* ============================================================
+       Design tokens — identical to Form.html (source of truth), so the
+       landing page and the form render as one app. Copied verbatim;
+       some tokens (row/highlight/modal) are unused here but kept so the
+       two :root blocks stay in lockstep.
+       ============================================================ */
     :root {
-      --trinity-blue: #1f4e79;
-      --trinity-blue-bg: #eaf1f8;
-      --line: #b8c6d6;
-      --text: #1a1a1a;
-      --error: #b00020;
-      --muted: #6b6b6b;
+      /* ---- Brand ----
+         Brand blue is now an ACCENT, not the whole canvas: it lives on the
+         primary button, the title, active states and the highlight star —
+         the way an iPadOS app uses its tint color. */
+      --trinity-blue: #1f4e79;          /* primary brand / tint */
+      --trinity-blue-strong: #163a5a;   /* pressed */
+      --trinity-blue-light: #5a87b8;
+      --tint-soft: #eaf1f9;             /* tinted fill (secondary button, header strip) */
+      --tint-softer: #f3f7fc;
+
+      /* ---- Surfaces & ink ----
+         iPad "grouped" look: a soft neutral app background with white cards
+         floating on top. Still high-contrast for sunlight — the background
+         is only a hair off-white, text stays near-black, separators stay
+         clearly visible. No low-opacity body text anywhere. */
+      --app-bg: #e9edf1;                /* cool neutral canvas */
+      --surface: #ffffff;               /* card surface */
+      --surface-sunk: #eef4fb;          /* active/focused row tint */
+      --hairline: #d4dae1;              /* crisp separator */
+      --line: #bcc6d1;                  /* input borders — visible in glare */
+      --line-strong: #93a0ad;
+      --text: #11161c;                  /* near-black body ink */
+      --label: #41505f;                 /* label ink — confident, not washed out */
+      --muted: #6a7480;                 /* placeholders / meta */
+      --on-blue: #ffffff;
+
+      /* ---- Status ---- */
+      --error: #c2102e;
+      --success: #1c7a3a;
+
+      /* ---- Row highlight (officer-marked entries) ---- */
+      --hl-bg: #fff3b0;
+      --hl-ink: #8a1400;
+      --hl-accent: #e0a900;
+      --hl-accent-ink: #5e4a00;
+
+      /* ---- Type scale ----
+         Small modular scale (~1.2 ratio) expressed as rem off a 16px root.
+         Every font-size in the app pulls from one of these tokens. */
+      --fs-2xs: 0.75rem;    /* 12px — meta / version stamp */
+      --fs-xs:  0.8125rem;  /* 13px — field labels */
+      --fs-sm:  0.9375rem;  /* 15px — table header, modal body */
+      --fs-md:  1.0625rem;  /* 17px — inputs & body (iOS body size) */
+      --fs-lg:  1.25rem;    /* 20px — modal headings */
+      --fs-xl:  1.4375rem;  /* 23px — sub-title */
+      --fs-2xl: 1.75rem;    /* 28px — large title */
+
+      /* ---- Touch & shape ----
+         56px minimum tap target for a gloved/standing officer; generous
+         iPad-style rounding on cards, inputs and buttons. */
+      --row-height: 52px;   /* denser rows = more entries on screen for fast logging */
+      --tap: 54px;
+      --radius-lg: 12px;    /* cards — crisper, more squared-off */
+      --radius: 10px;       /* buttons */
+      --radius-sm: 9px;     /* inputs */
+      --gap: 14px;
+
+      /* Minimal crisp elevation (contrast never depends on it). */
+      --shadow-card: 0 1px 2px rgba(16, 22, 28, 0.07);
+      /* High-contrast focus ring for kiosk / gloved use. */
+      --focus-ring: 0 0 0 4px rgba(31, 78, 121, 0.28);
     }
     * { box-sizing: border-box; }
+    /* Pin placeholder text so it matches Inter + size and reads as a
+       deliberate muted hint (see Form.html for the full note). */
+    ::placeholder {
+      color: var(--muted);
+      opacity: 1;
+      font-family: inherit;
+      font-size: inherit;
+    }
     html, body {
-      margin: 0; padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
       color: var(--text);
-      background: #fff;
+      background: var(--app-bg);
+      font-size: 16px;            /* root for the rem-based type scale */
+      -webkit-text-size-adjust: 100%;
+      -webkit-tap-highlight-color: transparent;
+    }
+    body {
+      font-size: var(--fs-md);
+      -webkit-font-smoothing: antialiased;
       padding: 40px 20px;
     }
+    /* Single white card on the app canvas — same surface treatment as the
+       grouped section cards in Form.html (white, hairline border, soft lift). */
     .card {
       max-width: 560px;
       width: 100%;
       margin: 0 auto;
-      padding: 32px 36px;
-      background: var(--trinity-blue-bg);
-      border-radius: 8px;
+      padding: 32px 32px;
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
       text-align: center;
     }
     h1 {
-      margin: 0 0 4px;
+      margin: 0 0 6px;
       color: var(--trinity-blue);
-      font-size: 24px;
+      font-size: var(--fs-2xl);
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      line-height: 1.12;
     }
+    /* Uppercase tracked sub-title — same treatment as Form.html's header h2. */
     h2 {
-      margin: 0 0 28px;
+      margin: 0 0 26px;
       color: var(--trinity-blue);
-      font-size: 18px;
+      font-size: var(--fs-sm);
       font-weight: 600;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
     }
     label {
       display: block;
-      font-size: 14px;
-      color: var(--trinity-blue);
-      font-weight: 600;
+      font-size: var(--fs-2xs);
+      color: var(--label);
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
       margin-bottom: 6px;
       text-align: left;
     }
     .hint {
-      font-size: 12px;
+      font-size: var(--fs-xs);
       color: var(--muted);
       font-weight: 400;
+      letter-spacing: 0;
+      text-transform: none;   /* keep the hint sentence-case under the label */
       margin-left: 6px;
     }
     .email-row {
       display: flex;
-      gap: 8px;
+      gap: 10px;
       margin-bottom: 8px;
     }
+    /* Shared input style — identical to Form.html's text fields. */
     input[type="email"] {
       flex: 1;
-      padding: 14px;
-      font-size: 17px;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      background: #fff;
-      color: var(--text);
       min-width: 0;
+      min-height: var(--tap);
+      padding: 12px 14px;
+      font-size: var(--fs-md);
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      color: var(--text);
+      transition: border-color .12s ease, box-shadow .12s ease;
     }
     input[type="email"]:focus {
       outline: none;
       border-color: var(--trinity-blue);
-      box-shadow: 0 0 0 2px rgba(31, 78, 121, 0.18);
+      box-shadow: var(--focus-ring);
     }
+    /* Secondary action — mirrors Form.html's neutral Clear button. */
     .add-btn {
-      background: #fff;
-      color: var(--trinity-blue);
-      border: 1px solid var(--trinity-blue);
-      padding: 0 18px;
-      font-size: 17px;
+      background: var(--surface);
+      color: var(--label);
+      border: 1.5px solid var(--line);
+      padding: 0 20px;
+      height: var(--tap);
+      font-size: var(--fs-md);
       font-weight: 600;
-      border-radius: 4px;
+      border-radius: var(--radius);
       cursor: pointer;
       min-width: 72px;
+      transition: background .12s ease, transform .08s ease;
     }
-    .add-btn:hover { background: #dde8f3; }
+    .add-btn:hover { background: #f0f2f5; }
+    .add-btn:active { transform: scale(0.98); }
+    .add-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
     .chips {
       display: flex;
       flex-wrap: wrap;
@@ -106,17 +215,18 @@
       min-height: 4px;
       text-align: left;
     }
+    /* Recipient pill — soft tinted fill, same family as Form.html's page pill. */
     .chip {
       display: inline-flex;
       align-items: center;
       gap: 4px;
       padding: 8px 4px 8px 14px;
-      background: #fff;
-      border: 1px solid var(--trinity-blue);
+      background: var(--tint-soft);
+      border: 1px solid var(--hairline);
       color: var(--trinity-blue);
       border-radius: 999px;
-      font-size: 15px;
-      font-weight: 500;
+      font-size: var(--fs-sm);
+      font-weight: 600;
       max-width: 100%;
     }
     .chip-text {
@@ -129,29 +239,36 @@
       background: transparent;
       border: 0;
       color: var(--trinity-blue);
-      font-size: 22px;
+      font-size: var(--fs-lg);
       line-height: 1;
       cursor: pointer;
       padding: 2px 10px;
       border-radius: 999px;
     }
-    .chip-remove:hover { background: var(--trinity-blue-bg); }
+    .chip-remove:hover { background: rgba(31, 78, 121, 0.10); }
+    /* Primary action — identical to Form.html's Submit button. */
     button.start {
       width: 100%;
+      height: var(--tap);
       background: var(--trinity-blue);
-      color: #fff;
+      color: var(--on-blue);
       border: 0;
-      padding: 16px;
-      font-size: 18px;
-      font-weight: 600;
-      border-radius: 6px;
+      padding: 14px;
+      font-size: var(--fs-md);
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      border-radius: var(--radius);
       cursor: pointer;
+      box-shadow: 0 1px 2px rgba(22, 58, 90, 0.25);
+      transition: background .12s ease, transform .08s ease;
     }
-    button.start:hover { background: #173b5c; }
-    button.start:disabled { background: #95a8bd; cursor: not-allowed; }
+    button.start:hover { background: var(--trinity-blue-strong); }
+    button.start:active { transform: scale(0.98); }
+    button.start:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+    button.start:disabled { background: #aebccb; box-shadow: none; cursor: not-allowed; }
     .error {
       color: var(--error);
-      font-size: 14px;
+      font-size: var(--fs-sm);
       margin: 4px 0 4px;
       text-align: left;
       min-height: 18px;

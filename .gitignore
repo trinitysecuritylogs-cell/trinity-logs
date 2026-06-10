@@ -12,3 +12,10 @@
 
 # Logs / debug
 *.log
+
+# Backend — NOT part of the GitHub Pages site. These run on Google Apps
+# Script / Cloudflare and hold secrets (Apps Script URL, Drive file IDs,
+# recipient emails). Keep them out of this public repo. Back them up
+# separately; they are the source of truth for the backend.
+Code.js
+worker.js

@@ -18,66 +18,162 @@
 
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%231f4e79'/%3E%3Ctext x='50%25' y='54%25' font-family='Arial,Helvetica,sans-serif' font-size='34' font-weight='700' fill='white' text-anchor='middle' dominant-baseline='middle'%3ET%3C/text%3E%3C/svg%3E">
   <style>
+    /* Bundled UI font so every device renders identical letters instead of
+       falling back to its own system font. Self-hosted (inter.woff2 ships
+       with the app) so it still works offline. One variable file covers
+       every weight (400 body, 600 labels, 700 bold). font-display:swap shows
+       the fallback instantly, then swaps in Inter when it's loaded. */
+    @font-face {
+      font-family: 'Inter';
+      src: url('inter.woff2') format('woff2');
+      font-weight: 100 900;
+      font-style: normal;
+      font-display: swap;
+    }
+
     :root {
-      --trinity-blue: #1f4e79;
+      /* ---- Brand ----
+         Brand blue is now an ACCENT, not the whole canvas: it lives on the
+         primary button, the title, active states and the highlight star —
+         the way an iPadOS app uses its tint color. */
+      --trinity-blue: #1f4e79;          /* primary brand / tint */
+      --trinity-blue-strong: #163a5a;   /* pressed */
       --trinity-blue-light: #5a87b8;
-      --trinity-blue-bg: #eaf1f8;
-      --line: #b8c6d6;
-      --text: #1a1a1a;
-      --muted: #6b6b6b;
-      --error: #b00020;
-      --success: #1f7a3f;
-      --row-height: 44px;
+      --tint-soft: #eaf1f9;             /* tinted fill (secondary button, header strip) */
+      --tint-softer: #f3f7fc;
+
+      /* ---- Surfaces & ink ----
+         iPad "grouped" look: a soft neutral app background with white cards
+         floating on top. Still high-contrast for sunlight — the background
+         is only a hair off-white, text stays near-black, separators stay
+         clearly visible. No low-opacity body text anywhere. */
+      --app-bg: #e9edf1;                /* cool neutral canvas */
+      --surface: #ffffff;               /* card surface */
+      --surface-sunk: #eef4fb;          /* active/focused row tint */
+      --hairline: #d4dae1;              /* crisp separator */
+      --line: #bcc6d1;                  /* input borders — visible in glare */
+      --line-strong: #93a0ad;
+      --text: #11161c;                  /* near-black body ink */
+      --label: #41505f;                 /* label ink — confident, not washed out */
+      --muted: #6a7480;                 /* placeholders / meta */
+      --on-blue: #ffffff;
+
+      /* ---- Status ---- */
+      --error: #c2102e;
+      --success: #1c7a3a;
+
+      /* ---- Row highlight (officer-marked entries) ---- */
+      --hl-bg: #fff3b0;
+      --hl-ink: #8a1400;
+      --hl-accent: #e0a900;
+      --hl-accent-ink: #5e4a00;
+
+      /* ---- Type scale ----
+         Small modular scale (~1.2 ratio) expressed as rem off a 16px root.
+         Every font-size in the app pulls from one of these tokens. */
+      --fs-2xs: 0.75rem;    /* 12px — meta / version stamp */
+      --fs-xs:  0.8125rem;  /* 13px — field labels */
+      --fs-sm:  0.9375rem;  /* 15px — table header, modal body */
+      --fs-md:  1.0625rem;  /* 17px — inputs & body (iOS body size) */
+      --fs-lg:  1.25rem;    /* 20px — modal headings */
+      --fs-xl:  1.4375rem;  /* 23px — sub-title */
+      --fs-2xl: 1.75rem;    /* 28px — large title */
+
+      /* ---- Touch & shape ----
+         56px minimum tap target for a gloved/standing officer; generous
+         iPad-style rounding on cards, inputs and buttons. */
+      --row-height: 52px;   /* denser rows = more entries on screen for fast logging */
+      --tap: 54px;
+      --radius-lg: 12px;    /* cards — crisper, more squared-off */
+      --radius: 10px;       /* buttons */
+      --radius-sm: 9px;     /* inputs */
+      --gap: 14px;
+
+      /* Minimal crisp elevation (contrast never depends on it). */
+      --shadow-card: 0 1px 2px rgba(16, 22, 28, 0.07);
+      /* High-contrast focus ring for kiosk / gloved use. */
+      --focus-ring: 0 0 0 4px rgba(31, 78, 121, 0.28);
     }
 
     * { box-sizing: border-box; }
 
+    /* Placeholder hint text ("Log entry…", "HH:MM") is drawn by the browser's
+       ::placeholder pseudo-element, which defaults to its own muted color and
+       (in some engines) reduced opacity. Pin it: same Inter + size as real
+       input via inherit, a deliberate muted color, opacity:1 so it doesn't
+       look washed out. */
+    ::placeholder {
+      color: var(--muted);
+      opacity: 1;
+      font-family: inherit;
+      font-size: inherit;
+    }
+
     html, body {
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-                   Arial, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                   Roboto, Arial, sans-serif;
       color: var(--text);
-      background: #fff;
-      font-size: 16px;
+      background: var(--app-bg);  /* soft grouped-app canvas */
+      font-size: 16px;            /* root for the rem-based type scale */
+      -webkit-text-size-adjust: 100%;
+      -webkit-tap-highlight-color: transparent;
     }
+    body { font-size: var(--fs-md); -webkit-font-smoothing: antialiased; }
 
     .page {
-      max-width: 1340px;
+      max-width: 1100px;
       margin: 0 auto;
-      padding: 16px 20px 80px;
+      padding: 18px 18px 96px;
     }
 
-    /* ---------- Header ---------- */
+    /* Shared card surface for the three grouped sections. */
+    section.top-fields,
+    section.log-table,
+    section.bottom {
+      background: var(--surface);
+      border: 1px solid var(--hairline);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card);
+    }
+
+    /* ---------- Header ----------
+       Solid Trinity-blue app bar: brand-forward and authoritative, the way a
+       serious enterprise/security app wears its identity in the nav bar. */
     header.brand {
-      text-align: center;
-      padding: 8px 0 14px;
-      border-bottom: 2px solid var(--trinity-blue);
-      margin-bottom: 16px;
+      text-align: left;
+      background: var(--trinity-blue);
+      color: var(--on-blue);
+      padding: 16px 22px;
+      border-radius: var(--radius-lg);
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-card);
     }
     header.brand h1 {
       margin: 0;
-      font-size: 22px;
-      color: var(--trinity-blue);
+      font-size: var(--fs-xl);
+      color: var(--on-blue);
       font-weight: 700;
-      letter-spacing: 0.3px;
+      letter-spacing: -0.2px;
+      line-height: 1.12;
     }
     header.brand h2 {
-      margin: 4px 0 0;
-      font-size: 18px;
-      color: var(--trinity-blue);
+      margin: 5px 0 0;
+      font-size: var(--fs-sm);
+      color: rgba(255, 255, 255, 0.82);
       font-weight: 600;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
     }
 
     /* ---------- Top fields ---------- */
     section.top-fields {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      padding: 12px;
-      background: var(--trinity-blue-bg);
-      border-radius: 6px;
-      margin-bottom: 16px;
+      gap: 14px var(--gap);
+      padding: 16px;
+      margin-bottom: 14px;
     }
     section.top-fields > div:nth-child(1),
     section.top-fields > div:nth-child(2),
@@ -86,64 +182,70 @@
     }
     section.top-fields label {
       display: block;
-      font-size: 13px;
-      color: var(--trinity-blue);
-      font-weight: 600;
-      margin-bottom: 4px;
+      font-size: var(--fs-2xs);
+      color: var(--label);          /* confident, uppercase field label */
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
     }
     section.top-fields input {
       width: 100%;
-      padding: 10px 10px;
-      font-size: 16px;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      background: #fff;
+      min-height: var(--tap);
+      padding: 12px 14px;
+      font-size: var(--fs-md);
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
       color: var(--text);
+      transition: border-color .12s ease, box-shadow .12s ease;
     }
     section.top-fields input:focus {
       outline: none;
       border-color: var(--trinity-blue);
-      box-shadow: 0 0 0 2px rgba(31, 78, 121, 0.18);
+      box-shadow: var(--focus-ring);
     }
 
     /* ---------- Log table ---------- */
     section.log-table {
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      overflow: hidden;
-      margin-bottom: 16px;
+      border-radius: var(--radius-lg);
+      overflow: hidden;            /* clip rows to the rounded card */
+      margin-bottom: 14px;
     }
     .row, .row-header {
       display: grid;
-      grid-template-columns: 140px 1fr 56px;
+      grid-template-columns: 150px 1fr 68px;
       align-items: stretch;
     }
+    /* Solid brand-blue column header — clear, authoritative, on-brand. */
     .row-header {
       background: var(--trinity-blue);
-      color: #fff;
-      font-weight: 600;
-      font-size: 14px;
+      color: var(--on-blue);
+      font-weight: 700;
+      font-size: var(--fs-xs);
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
     }
     .row-header > div {
-      padding: 10px 12px;
+      padding: 11px 16px;
     }
     .row-header .cell-desc,
     .row-header .cell-hl {
-      border-left: 1px solid rgba(255,255,255,0.3);
+      border-left: 1px solid rgba(255, 255, 255, 0.22);
     }
     .row-header .cell-hl {
-      padding: 10px 4px;
+      padding: 12px 4px;
       text-align: center;
-      font-size: 12px;
+      font-size: var(--fs-2xs);
     }
     .row + .row {
-      border-top: 1px solid var(--line);
+      border-top: 1px solid var(--hairline);   /* hairline separators */
     }
     .row .cell-time, .row .cell-desc {
       padding: 0;
     }
     .row .cell-desc {
-      border-left: 1px solid var(--line);
+      border-left: 1px solid var(--hairline);
     }
     .row .cell-time {
       display: flex;
@@ -154,16 +256,18 @@
       width: 100%;
       min-height: var(--row-height);
       border: 0;
-      padding: 11px 12px;
-      font-size: 16px;
+      padding: 15px 16px;
+      font-size: var(--fs-md);
       background: transparent;
       color: var(--text);
       font-family: inherit;
-      line-height: 1.35;
+      line-height: 1.4;
     }
     .row input.row-time {
       height: var(--row-height);
-      padding: 0 12px;
+      padding: 0 16px;
+      font-variant-numeric: tabular-nums;
+      color: var(--label);
     }
     .row textarea.row-desc {
       display: block;
@@ -173,45 +277,85 @@
     .row input:focus,
     .row textarea:focus {
       outline: none;
-      background: #f5f9fd;
+      background: var(--surface-sunk);
       box-shadow: inset 0 0 0 2px var(--trinity-blue);
     }
-    .row.has-content .cell-time { background: #fafcff; }
+    /* Fast-entry aid: the whole active row lights up with a blue left rail,
+       so a head-down officer always sees exactly which line they're on. */
+    .row:focus-within { background: var(--surface-sunk); }
+    .row:focus-within .cell-time { box-shadow: inset 4px 0 0 0 var(--trinity-blue); }
+    .row.has-content .cell-time { background: var(--surface-sunk); }
+    .row.has-content .row-time { color: var(--text); }
 
     /* ---------- Row highlight (officer marks important entries) ---------- */
     .row .cell-hl {
-      border-left: 1px solid var(--line);
+      border-left: 1px solid var(--hairline);
       display: flex;
       align-items: center;
       justify-content: center;
     }
+    /* The "Mark" control flags an entry as IMPORTANT — "look here" (flagged
+       rows print bold dark-red in the emailed PDF, an alert tone). The JS
+       writes a literal "★" as the button's text; a star says "favorite", the
+       wrong word. We can't touch the JS, so we hide that glyph (font-size:0)
+       and draw an EXCLAMATION from two pseudo-elements — a bar (::before) and
+       a dot (::after). No border or fill in the resting state: the icon IS
+       the control, so the Mark cell no longer nests a box inside a box.
+       Colour carries the state (grey → amber on hover → alert-red when
+       flagged), backed up by the row's own red+yellow highlight. */
     button.hl-btn {
-      width: 36px;
-      height: 36px;
+      position: relative;
+      width: 44px;
+      height: 44px;
       padding: 0;
-      border-radius: 50%;
-      border: 2px solid var(--line);
-      background: #fff;
-      color: #9aa7b5;
-      font-size: 17px;
-      line-height: 1;
+      border: 0;
+      background: transparent;
+      border-radius: 9px;          /* shape for hover / focus feedback only */
+      color: var(--line-strong);   /* resting "!" ink */
+      font-size: 0;                /* hide the JS-rendered ★ glyph */
       cursor: pointer;
+      transition: transform .08s ease, color .12s ease, background .12s ease;
     }
-    button.hl-btn:hover { border-color: #c9a400; color: #c9a400; }
+    button.hl-btn::before {        /* exclamation bar */
+      content: "";
+      position: absolute;
+      top: 11px;
+      left: 20px;
+      width: 4px;
+      height: 16px;
+      border-radius: 2px;
+      background: currentColor;
+    }
+    button.hl-btn::after {         /* exclamation dot */
+      content: "";
+      position: absolute;
+      top: 30px;
+      left: 20px;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    button.hl-btn:hover { background: rgba(224, 169, 0, 0.12); color: var(--hl-accent); }
+    button.hl-btn:active { transform: scale(0.9); }
+    button.hl-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
     /* These come AFTER the .has-content rule on purpose: equal specificity
        means source order decides, and highlight must win the background. */
     .row.highlighted .cell-time,
-    .row.highlighted .cell-desc { background: #fff6bf; }
+    .row.highlighted .cell-desc { background: var(--hl-bg); }
     /* Match the PDF output: highlighted entries are bold dark-red. */
     .row.highlighted .row-time,
     .row.highlighted .row-desc {
       font-weight: 700;
-      color: #8f1500;
+      color: var(--hl-ink);
     }
+    /* Flagged: the "!" turns alert-red to match the bold dark-red entry text —
+       no chip needed, the highlighted row already carries the state. */
     .row.highlighted button.hl-btn {
-      background: #ffd84d;
-      border-color: #c9a400;
-      color: #6b5300;
+      color: var(--hl-ink);
     }
 
     /* ---------- Page divider ---------- */
@@ -222,7 +366,7 @@
       gap: 12px;
       margin: 4px 0 12px;
       color: var(--trinity-blue);
-      font-size: 12px;
+      font-size: var(--fs-2xs);
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 1.2px;
@@ -231,14 +375,14 @@
     .page-divider::after {
       content: '';
       flex: 1;
-      border-top: 1px dashed var(--trinity-blue-light);
+      border-top: 1px solid var(--hairline);
     }
     .page-divider .page-label {
-      background: var(--trinity-blue-bg);
+      background: var(--tint-soft);
       color: var(--trinity-blue);
-      padding: 4px 12px;
+      padding: 5px 14px;
       border-radius: 999px;
-      border: 1px solid var(--trinity-blue-light);
+      border: 1px solid var(--hairline);
     }
 
     /* ---------- Bottom: signature, clear, submit ---------- */
@@ -247,41 +391,57 @@
       grid-template-columns: 1fr auto auto;
       gap: 16px;
       align-items: end;
-      padding: 14px;
-      background: var(--trinity-blue-bg);
-      border-radius: 6px;
+      padding: 16px;
     }
     .sig label {
       display: block;
-      font-size: 13px;
-      color: var(--trinity-blue);
-      font-weight: 600;
-      margin-bottom: 4px;
+      font-size: var(--fs-2xs);
+      color: var(--label);
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
     }
     .sig input {
       width: 100%;
-      padding: 10px 10px;
-      font-size: 16px;
-      border: 1px solid var(--line);
-      border-radius: 4px;
-      background: #fff;
+      min-height: var(--tap);
+      padding: 12px 14px;
+      font-size: var(--fs-md);
+      border: 1.5px solid var(--line);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
       font-style: italic;
     }
+    .sig input:focus {
+      outline: none;
+      border-color: var(--trinity-blue);
+      box-shadow: var(--focus-ring);
+    }
+    /* Primary action — filled, rounded, iOS-style tint button. */
     button.submit-btn {
       background: var(--trinity-blue);
-      color: #fff;
+      color: var(--on-blue);
       border: 0;
-      padding: 14px 28px;
-      font-size: 16px;
-      font-weight: 600;
-      border-radius: 6px;
+      padding: 14px 32px;
+      font-size: var(--fs-md);
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      border-radius: var(--radius);
       cursor: pointer;
-      min-width: 160px;
-      height: 48px;
+      min-width: 180px;
+      height: var(--tap);
+      box-shadow: 0 1px 2px rgba(22, 58, 90, 0.25);
+      transition: background .12s ease, transform .08s ease;
     }
-    button.submit-btn:hover { background: #173b5c; }
+    button.submit-btn:hover { background: var(--trinity-blue-strong); }
+    button.submit-btn:active { transform: scale(0.98); }
+    button.submit-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
     button.submit-btn:disabled {
-      background: #95a8bd;
+      background: #aebccb;
+      box-shadow: none;
       cursor: not-allowed;
     }
 
@@ -298,20 +458,20 @@
     .overlay.show { display: flex; }
     .modal {
       background: #fff;
-      border-radius: 8px;
-      padding: 24px;
+      border-radius: var(--radius-lg);
+      padding: 26px;
       max-width: 480px;
       width: 90%;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+      box-shadow: 0 12px 40px rgba(16, 22, 28, 0.28);
     }
     .modal h3 {
       margin: 0 0 12px;
       color: var(--trinity-blue);
-      font-size: 20px;
+      font-size: var(--fs-lg);
     }
     .modal p {
       margin: 0 0 20px;
-      font-size: 15px;
+      font-size: var(--fs-sm);
       line-height: 1.5;
     }
     .modal .actions {
@@ -320,20 +480,21 @@
       justify-content: flex-end;
     }
     .modal button {
-      padding: 10px 20px;
-      font-size: 15px;
-      border-radius: 4px;
+      min-height: var(--tap);
+      padding: 12px 22px;
+      font-size: var(--fs-md);
+      border-radius: var(--radius);
       cursor: pointer;
       border: 0;
       font-weight: 600;
     }
     .modal button.confirm {
       background: var(--trinity-blue);
-      color: #fff;
+      color: var(--on-blue);
     }
     .modal button.cancel {
-      background: #e5e5e5;
-      color: var(--text);
+      background: var(--tint-soft);
+      color: var(--trinity-blue);
     }
     .modal.success h3 { color: var(--success); }
     .modal.error h3 { color: var(--error); }
@@ -356,22 +517,30 @@
     }
 
     /* ---------- Clear button ---------- */
+    /* Secondary action — neutral so the blue Submit clearly owns "primary". */
     button.clear-btn {
-      background: #fff;
-      color: var(--trinity-blue);
-      border: 2px solid var(--trinity-blue);
-      padding: 12px 22px;
-      font-size: 15px;
+      background: var(--surface);
+      color: var(--label);
+      border: 1.5px solid var(--line);
+      padding: 12px 24px;
+      font-size: var(--fs-md);
       font-weight: 600;
-      border-radius: 6px;
+      letter-spacing: 0;
+      border-radius: var(--radius);
       cursor: pointer;
-      height: 48px;
+      height: var(--tap);
+      transition: background .12s ease, transform .08s ease;
     }
-    button.clear-btn:hover { background: #f0f6fc; }
+    button.clear-btn:hover { background: #f0f2f5; }
+    button.clear-btn:active { transform: scale(0.98); }
+    button.clear-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
 
     /* ---------- Narrow screens ---------- */
     @media (max-width: 600px) {
-      .page { padding: 12px 12px 60px; }
+      .page { padding: 12px 12px 72px; }
       section.top-fields { grid-template-columns: 1fr; }
       section.top-fields > div:nth-child(1),
       section.top-fields > div:nth-child(2),
@@ -384,7 +553,7 @@
       }
       button.submit-btn,
       button.clear-btn { width: 100%; min-width: 0; }
-      .row, .row-header { grid-template-columns: 90px 1fr 48px; }
+      .row, .row-header { grid-template-columns: 104px 1fr 60px; }
     }
   </style>
 </head>

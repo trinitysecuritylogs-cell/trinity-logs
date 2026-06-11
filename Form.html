@@ -597,6 +597,12 @@
   <!-- Log-table sections (one per page) are rendered into here by JS. -->
   <div id="logPages"></div>
 
+  <!-- Outbox badge — visible whenever unsent logs are queued on this
+       device. Updated by updateBadge(); hidden when the outbox is empty. -->
+  <div id="outboxBadge" style="display:none; margin:14px 0 0; padding:12px 16px;
+       border-radius:10px; background:#fff3cd; color:#664d03; font-weight:600;
+       text-align:center; font-size:14px;"></div>
+
   <section class="bottom">
     <div class="sig">
       <label for="officerSignature">Officer Signature</label>
@@ -611,7 +617,7 @@
        can confirm on the tablet that you're seeing the latest code.
        Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Form v2026-06-10-v3
+    Form v2026-06-11-v1
   </div>
 
 </div>
@@ -637,6 +643,7 @@
     <h3 id="statusTitle"><span class="spinner"></span>Submitting&hellip;</h3>
     <p id="statusMsg">Generating PDF and sending email. This usually takes 5&ndash;15 seconds.</p>
     <div class="actions" id="statusActions" style="display:none;">
+      <button class="cancel" id="backupBtn" style="display:none;">Save backup file</button>
       <button class="confirm" id="newFormBtn">Start a new log</button>
     </div>
   </div>
@@ -728,6 +735,19 @@
   // -------------------------------------------------------
   const draftDb = new Dexie('TrinityDailyLog');
   draftDb.version(1).stores({ drafts: 'id' });
+  // v2 (2026-06-11) — outbox: every submission is frozen in here BEFORE
+  // the first network attempt, and only deleted after the server says ok.
+  // A failed/interrupted submission therefore always survives on-device
+  // and is retried automatically (serially, oldest first).
+  draftDb.version(2).stores({ drafts: 'id', outbox: 'sid' });
+
+  // Ask Chrome to never evict our storage under disk pressure (granted
+  // automatically for installed PWAs). Best-effort.
+  try {
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist().catch(() => {});
+    }
+  } catch (e) { /* older WebViews */ }
 
   async function saveDraftNow(snapshot) {
     try {
@@ -1231,6 +1251,131 @@
     submit();
   });
 
+  // -----------------------------------------------------------
+  //  Outbox (never-lose-a-log, 2026-06-11)
+  //
+  //  Every submission is frozen into IndexedDB BEFORE the first network
+  //  attempt and deleted only after the server acknowledges it. The
+  //  flusher sends queued logs serially (oldest first) and is triggered
+  //  by: Submit taps, connectivity returning, a periodic timer, and
+  //  page load. Each log carries a unique submissionId; the server
+  //  dedupes on it, so retries can never produce duplicate emails.
+  // -----------------------------------------------------------
+  const backupBtn = document.getElementById('backupBtn');
+  const outboxBadge = document.getElementById('outboxBadge');
+
+  function newSid() {
+    return (window.crypto && crypto.randomUUID)
+      ? crypto.randomUUID()
+      : Date.now() + '-' + Math.random().toString(36).slice(2);
+  }
+
+  // sid of the outbox entry built from the log currently on screen.
+  // Re-submitting after an edit replaces that entry (fresh sid) instead
+  // of queueing two versions of the same log. Cleared on reset/clear so
+  // a NEW log can never overwrite a queued unsent one.
+  let activeOutboxSid = null;
+  let editedSinceEnqueue = false;
+  document.querySelector('.page').addEventListener('input', () => {
+    editedSinceEnqueue = true;
+  });
+
+  async function updateBadge() {
+    let n = 0;
+    try { n = await draftDb.outbox.count(); } catch (e) { /* leave 0 */ }
+    if (!outboxBadge) return;
+    outboxBadge.style.display = n ? '' : 'none';
+    if (n) {
+      outboxBadge.textContent = '⏳ ' + n + ' unsent log' + (n > 1 ? 's' : '') +
+        ' saved on this tablet — will send automatically. Do not clear ' +
+        'browser data.';
+    }
+  }
+
+  /** One network attempt for one outbox item. Never throws. */
+  async function sendOne(item) {
+    let resp;
+    try {
+      resp = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'processSubmissionFromWebApp',
+          // submissionId rides inside data so the server can dedupe.
+          data: Object.assign({}, item.data, { submissionId: item.sid })
+        })
+      });
+    } catch (netErr) {
+      // fetch only throws on real network failures.
+      return { ok: false, kind: 'network', err: netErr };
+    }
+    let result;
+    try {
+      result = await resp.json();
+    } catch (parseErr) {
+      // Got a response but not JSON — treat as server bug.
+      return { ok: false, kind: 'server', err: parseErr };
+    }
+    if (result.ok) return { ok: true, result: result };
+    return {
+      ok: false, kind: 'server',
+      err: new Error(result.error || 'Server rejected the submission.')
+    };
+  }
+
+  // Serialized flusher: calls chain on a promise so a Submit tap during
+  // a background flush waits its turn instead of racing it.
+  let _flushChain = Promise.resolve();
+  function flushOutbox(interactiveSid) {
+    const run = () => flushOutboxNow_(interactiveSid);
+    _flushChain = _flushChain.then(run, run);
+    return _flushChain;
+  }
+
+  async function flushOutboxNow_(interactiveSid) {
+    let items = [];
+    try { items = await draftDb.outbox.toArray(); } catch (e) { /* IDB down */ }
+    items.sort((a, b) => (a.queuedAt || 0) - (b.queuedAt || 0));
+
+    let interactiveHandled = false;
+    for (const item of items) {
+      const r = await sendOne(item);
+      if (r.ok) {
+        try { await draftDb.outbox.delete(item.sid); } catch (e) {}
+        if (item.sid === interactiveSid) {
+          onSuccess(r.result);
+          interactiveHandled = true;
+        } else if (item.sid === activeOutboxSid && !editedSinceEnqueue) {
+          // A background retry just sent the log still shown on screen
+          // (untouched since it was queued) — safe to reset for the
+          // next officer.
+          clearDraft();
+          resetFormInPlace();
+        }
+        if (item.sid === activeOutboxSid) activeOutboxSid = null;
+      } else {
+        // Serial queue: stop at the first failure, keep order, retry
+        // later. Only a Submit tap surfaces the error modal.
+        if (interactiveSid && !interactiveHandled) {
+          onFailure(r.kind, r.err);
+          interactiveHandled = true;
+        }
+        break;
+      }
+    }
+    // Race safety: a background flush picked up the interactive item
+    // just before our turn. Gone from the outbox (and the outbox is
+    // readable) = it was sent. If we can't read the outbox at all,
+    // report failure — never claim success we can't verify.
+    if (interactiveSid && !interactiveHandled) {
+      let getOk = false, still = null;
+      try { still = await draftDb.outbox.get(interactiveSid); getOk = true; } catch (e) {}
+      if (getOk && !still) onSuccess();
+      else if (!getOk) onFailure('server', new Error('Tablet storage error — tap Submit again.'));
+    }
+    updateBadge();
+  }
+
   async function submit() {
     const data = gatherData();
     submitBtn.disabled = true;
@@ -1239,44 +1384,36 @@
     statusMsg.textContent =
       'Generating PDF and sending email. This usually takes 5–15 seconds.';
     statusActions.style.display = 'none';
+    backupBtn.style.display = 'none';
     showOverlay(statusOverlay);
 
-    // We classify failures into two buckets so HR8 can show the right
-    // message: 'network' = fetch threw (offline / DNS / TLS / aborted),
-    // 'server' = we got a response but it wasn't ok or the body said so.
-    try {
-      let resp;
-      try {
-        resp = await fetch(WORKER_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'processSubmissionFromWebApp',
-            data: data
-          })
-        });
-      } catch (netErr) {
-        // fetch only throws on real network failures.
-        return onFailure('network', netErr);
-      }
-
-      let result;
-      try {
-        result = await resp.json();
-      } catch (parseErr) {
-        // We got a response, but it wasn't valid JSON — treat as server bug.
-        return onFailure('server', parseErr);
-      }
-
-      if (result.ok) {
-        onSuccess(result.result);
-      } else {
-        onFailure('server', new Error(result.error || 'Server rejected the submission.'));
-      }
-    } catch (err) {
-      // Defensive — shouldn't be reachable, but if it is, classify by online state.
-      onFailure(navigator.onLine ? 'server' : 'network', err);
+    // Freeze this log into the outbox BEFORE any network attempt — from
+    // this moment a crash, tab kill or power loss can no longer lose it.
+    // A re-submit of the same on-screen log replaces its queued copy.
+    const sid = newSid();
+    if (activeOutboxSid) {
+      try { await draftDb.outbox.delete(activeOutboxSid); } catch (e) {}
     }
+    activeOutboxSid = sid;
+    editedSinceEnqueue = false;
+    let queued = true;
+    try {
+      await draftDb.outbox.put({ sid: sid, queuedAt: Date.now(), data: data });
+    } catch (e) {
+      queued = false;
+      console.warn('[trinity] outbox write failed:', e);
+    }
+
+    if (!queued) {
+      // IndexedDB unavailable (private mode / locked-down WebView):
+      // fall back to a direct send — same protection as the old code.
+      const r = await sendOne({ sid: sid, data: data });
+      if (r.ok) onSuccess(r.result); else onFailure(r.kind, r.err);
+      return;
+    }
+
+    updateBadge();
+    await flushOutbox(sid);
   }
 
   let lastSubmitOk = false;
@@ -1316,6 +1453,12 @@
     lastSubmitOk = false;
     halfEmptyWarned = false;
 
+    // The on-screen log is gone — any still-queued outbox entries belong
+    // to PAST logs and must never be replaced by a future re-submit.
+    activeOutboxSid = null;
+    editedSinceEnqueue = false;
+    backupBtn.style.display = 'none';
+
     submitBtn.disabled = false;
     hideOverlay(statusOverlay);
     window.scrollTo({ top: 0, behavior: 'auto' });
@@ -1333,18 +1476,21 @@
     if (kind === 'network') {
       statusTitle.innerHTML = '✕ No connection';
       statusMsg.textContent =
-        "Couldn't reach the server. Your log is saved on this tablet. " +
-        "When you have WiFi, tap Submit again.";
+        "Couldn't reach the server. Your log is saved in this tablet's " +
+        "outbox and will send automatically when WiFi is back — you can " +
+        "also tap Submit again, or save a backup file now.";
     } else {
       statusTitle.innerHTML = '✕ Server error';
       statusMsg.textContent =
         'Server error: ' +
         (err && err.message ? err.message : String(err)) +
-        '. Your log is saved on this tablet. Try Submit again, or contact ' +
-        'your manager if this persists.';
+        '. Your log is saved in this tablet’s outbox and will be ' +
+        'retried automatically. Try Submit again, or contact your ' +
+        'manager if this persists.';
     }
 
     statusActions.style.display = 'flex';
+    backupBtn.style.display = '';
     submitBtn.disabled = false;
     newFormBtn.textContent = 'Close and retry';
   }
@@ -1415,6 +1561,53 @@
     clearTimeout(_saveTimer);
     saveDraftNow(buildDraftSnapshot());
   });
+
+  // -----------------------------------------------------------
+  //  Backup file (escape hatch). Downloads the on-screen log plus
+  //  every queued outbox log as a readable .txt — works fully offline,
+  //  lands in the tablet's Downloads folder.
+  // -----------------------------------------------------------
+  backupBtn.addEventListener('click', async () => {
+    const data = gatherData();
+    const lines = [];
+    lines.push('TRINITY DAILY LOG — DEVICE BACKUP');
+    lines.push('Saved: ' + new Date().toString());
+    lines.push('');
+    lines.push('Officer:   ' + data.dutyOfficer);
+    lines.push('Location:  ' + data.location);
+    lines.push('Date:      ' + data.date);
+    lines.push('Shift:     ' + data.startTime + ' – ' + data.endTime);
+    lines.push('Signature: ' + data.officerSignature);
+    lines.push('');
+    data.rows.forEach(r => {
+      if (r.time || r.description) lines.push('  ' + (r.time || '--:--') + '  ' + r.description);
+    });
+
+    let queued = [];
+    try { queued = await draftDb.outbox.toArray(); } catch (e) {}
+    lines.push('');
+    lines.push('--- RAW DATA (this log + ' + queued.length + ' queued) ---');
+    lines.push(JSON.stringify({ currentForm: data, outbox: queued }, null, 2));
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'DailyLog_backup_' + (data.date || 'undated') + '_' +
+      (data.dutyOfficer || 'officer').replace(/[^A-Za-z0-9]+/g, '_') + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  });
+
+  // -----------------------------------------------------------
+  //  Outbox auto-retry triggers: page load (after things settle),
+  //  connectivity returning, and a 3-minute heartbeat. All silent —
+  //  only a Submit tap shows modals.
+  // -----------------------------------------------------------
+  window.addEventListener('online', () => { flushOutbox(); });
+  setInterval(() => { if (navigator.onLine !== false) flushOutbox(); }, 3 * 60 * 1000);
+  setTimeout(() => { updateBadge(); flushOutbox(); }, 4000);
 
 </script>
 

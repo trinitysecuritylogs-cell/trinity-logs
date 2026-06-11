@@ -23,7 +23,7 @@
  * footers ("Form v2026-…") should be bumped in lockstep with this.
  * ------------------------------------------------------------------ */
 
-const SW_VERSION = '2026-06-10-v3';
+const SW_VERSION = '2026-06-11-v1';
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 

@@ -617,7 +617,7 @@
        can confirm on the tablet that you're seeing the latest code.
        Format: yyyy-mm-dd-buildN where N is the build number for that day. -->
   <div style="text-align:center; padding:16px 0; color:#999; font-size:11px; font-family:monospace;">
-    Form v2026-06-11-v1
+    Form v2026-06-11-v2
   </div>
 
 </div>
@@ -1382,7 +1382,7 @@
     statusModal.className = 'modal';
     statusTitle.innerHTML = '<span class="spinner"></span>Submitting…';
     statusMsg.textContent =
-      'Generating PDF and sending email. This usually takes 5–15 seconds.';
+      'Saving your log to the server. This usually takes a few seconds.';
     statusActions.style.display = 'none';
     backupBtn.style.display = 'none';
     showOverlay(statusOverlay);
@@ -1423,7 +1423,8 @@
     statusModal.className = 'modal success';
     statusTitle.innerHTML = '✓ Log submitted';
     statusMsg.textContent =
-      'PDF emailed to manager. Resetting form for the next officer…';
+      'Log saved on the server — the PDF emails to the manager within ' +
+      'minutes. Resetting form for the next officer…';
     statusActions.style.display = 'none';
     // HR3 — only on success: nuke the saved draft so the next open is blank.
     clearDraft();
